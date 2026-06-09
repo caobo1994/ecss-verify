@@ -1,8 +1,8 @@
-# Thesis Verification Guide
+# ECSS Verification Guide
 
 This document explains how to reproduce every verification experiment
-referenced in the thesis.  Each section gives the exact command, expected
-output, and the thesis claim it supports.
+referenced in the companion papers. Each section gives the exact command, expected
+output, and the paper claim it supports.
 
 ---
 
