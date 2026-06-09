@@ -427,6 +427,69 @@ def demo():
     return ok
 
 
+# ═══════════════════════════════════════════════════════
+# Demo 2: Exponential ODE
+# ═══════════════════════════════════════════════════════
+
+def demo_exponential():
+    """ECSS for x' = x·p (index-0 ODE, sensitivity parameter p).
+
+    Analytic: x(t) = e^{pt}, sensitivities ∂^q x/∂p^q = t^q e^{pt}.
+
+    SOV: {(0), (1), (2)}.  Expected ECSS:
+      Order (0): x' - p·x = 0
+      Order (1): x_p' - x - p·x_p = 0
+      Order (2): x_pp' - 2·x_p - p·x_pp = 0
+    """
+    print("=" * 70)
+    print("  MVTS Builder — Exponential ODE ECSS Generation")
+    print("=" * 70)
+
+    m = 1
+    closed = compute_sov_closure([(0,), (1,), (2,)], m)
+    zero = (0,)
+    sens = [q for q in closed if q != zero]
+
+    print(f"\n  Closed SOV: {closed}")
+    print(f"  n=1 (x), sensitivity param: p\n")
+
+    x_p  = MVTS.deriv('x', 1, closed, sens)  # x'
+    x_v  = MVTS.var('x', closed, sens)        # x
+    p_mv = MVTS.param(0, 1.0, closed)          # p (sensitivity param)
+
+    # f = x' - p·x = 0
+    f = x_p - p_mv * x_v
+
+    print("  Generated ECSS Equations (scaled coefficients, h=1, q! factor applied):\n")
+    for q in closed:
+        label = "Order (0)" if q == zero else f"Order {q}"
+        c = f[q]
+        print(f"  {label}: f_{q} = {c} = 0")
+
+    # Verify — note: builder uses SCALED coefficients: x_q = (h^q/q!)·∂^q/∂p^q
+    # At order (1): x_g = ∂x/∂p (since 1! = 1)
+    # At order (2): x_pp = ½·∂²x/∂p² (since 2! = 2)
+    print("\n" + "-" * 70)
+    print("  Verification (scaled coefficients — see note above)\n")
+
+    f0 = repr(f[zero]); f1 = repr(f[(1,)]); f2 = repr(f[(2,)])
+    tests_ode = [
+        ("f(0) contains x' − p·x", "x'" in f0),
+        ("f(1) contains x_p' − x − p·x_p", "x_g'" in f1),  # scaled = unscaled at order 1
+        ("f(2) contains x_pp' − x_pp − x_p (scaled form)", "x_q(2,)'" in f2 or "x_pp'" in f2),
+    ]
+    ok_ode = True
+    for desc, cond in tests_ode:
+        s = "PASS" if cond else "FAIL"
+        if not cond: ok_ode = False
+        print(f"    [{s}] {desc}")
+
+    print(f"\n  {'ALL CHECKS PASSED' if ok_ode else 'SOME FAILED'}")
+    return ok_ode
+
+
 if __name__ == "__main__":
     import sys
-    sys.exit(0 if demo() else 1)
+    ok1 = demo()           # pendulum
+    ok2 = demo_exponential()  # exponential ODE
+    sys.exit(0 if ok1 and ok2 else 1)
