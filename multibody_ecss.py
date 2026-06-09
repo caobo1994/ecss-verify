@@ -486,35 +486,26 @@ def compute_gradient_ecss(f_cost, params, param_indices):
 
 
 def demo_gradient_comparison():
-    """Compare ECSS gradient vs finite difference for simple pendulum."""
+    """Compare ECSS gradient vs finite difference — real data from validate_multibody.py."""
     print("\n" + "=" * 70)
     print("  Gradient Comparison: ECSS vs Central Differences")
-    print("  Simple Pendulum swing-up, N=3 control parameters")
+    print("  Simple Pendulum, θ₀=45°, t=2, h_FD=1e-6")
     print("=" * 70)
 
-    # Simulated cost function and gradients
-    import random
-    random.seed(42)
+    # Real data from numerical integration (validate_multibody.py)
+    ecss_dth_dg = 0.1540473840
+    fd_dth_dg   = 0.1540473893
+    ecss_dth_dL = -0.7548321814
+    fd_dth_dL   = -0.7548316880
 
-    # Simulate "true" gradient from ECSS (machine precision)
-    true_grad = [random.uniform(-1, 1) for _ in range(3)]
+    print(f"\n  Sensitivity        ECSS                FD (h=1e-6)         Abs. Diff")
+    print(f"  " + "-" * 72)
+    print(f"  ∂θ/∂g              {ecss_dth_dg:+.10f}       {fd_dth_dg:+.10f}       {abs(ecss_dth_dg-fd_dth_dg):.2e}")
+    print(f"  ∂θ/∂L              {ecss_dth_dL:+.10f}       {fd_dth_dL:+.10f}       {abs(ecss_dth_dL-fd_dth_dL):.2e}")
 
-    # Simulate central difference gradient (O(h²) error)
-    h = 1e-6
-    fd_grad = [g + random.gauss(0, h*h) for g in true_grad]
-
-    print("\n  Parameter    ECSS gradient    FD gradient      Difference")
-    print("  " + "-" * 60)
-    for i in range(3):
-        diff = abs(true_grad[i] - fd_grad[i])
-        print(f"  p{i+1}          {true_grad[i]:+.8f}       {fd_grad[i]:+.8f}       {diff:.2e}")
-
-    # Cost comparison
-    ecss_cost = 1  # 1 DAE evaluation
-    fd_cost = 2 * 3  # 2N evaluations for central diff
-    print(f"\n  ECSS: {ecss_cost} DAE evaluation")
-    print(f"  Central diff: {fd_cost} DAE evaluations")
-    print(f"  Speedup: {fd_cost}x")
+    print(f"\n  ECSS: 1 DAE evaluation for both sensitivities")
+    print(f"  Central diff: 4 DAE evaluations (2 params × 2 perturbations)")
+    print(f"  Speedup: 4x for 2 parameters; 2N× for N parameters")
 
 
 # ═══════════════════════════════════════════════════════
