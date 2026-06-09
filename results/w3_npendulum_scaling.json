@@ -1,0 +1,17 @@
+{
+  "system": "n_pendulum_chain_coupled",
+  "N_tested": [
+    1,
+    2
+  ],
+  "g": 9.8,
+  "h": 0.0001,
+  "t_final": 1.0,
+  "N1_state_err": 1.9993080968561117e-08,
+  "N2_state_err": 4.90171236933179e-11,
+  "N2_lambda_coupling": [
+    19.502081639449308,
+    9.751040819724654
+  ],
+  "pass": true
+}

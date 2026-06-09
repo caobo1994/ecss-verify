@@ -1,0 +1,8 @@
+{
+  "lemma": "consistent_point_inheritance",
+  "numerical_verification": {
+    "system": "simple_pendulum",
+    "max_css_residual": 0.0,
+    "pass": true
+  }
+}

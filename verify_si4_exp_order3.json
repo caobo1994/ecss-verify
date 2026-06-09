@@ -1,0 +1,112 @@
+{
+  "label": "Cascade SI-4 (exp, order 3)",
+  "kind": "exp",
+  "p1": 2.0,
+  "p2": 1.5,
+  "t": 0.5,
+  "sympy_reference": "cascade_si4_exp_order3.json",
+  "hand_formula_pass": true,
+  "complex_step_pass": true,
+  "results": [
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 0,
+      "order_total": 0,
+      "analytic": 4.23400003322535,
+      "sympy": 4.23400003322535,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 1,
+      "order_total": 1,
+      "analytic": 2.117000016612675,
+      "sympy": 2.117000016612675,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 1,
+      "q2": 0,
+      "order_total": 1,
+      "analytic": 2.117000016612675,
+      "sympy": 2.117000016612675,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 2,
+      "order_total": 2,
+      "analytic": 1.0585000083063374,
+      "sympy": 1.0585000083063374,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 1,
+      "q2": 1,
+      "order_total": 2,
+      "analytic": 1.0585000083063374,
+      "sympy": 1.0585000083063374,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 2,
+      "q2": 0,
+      "order_total": 2,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 3,
+      "order_total": 3,
+      "analytic": 0.5292500041531687,
+      "sympy": 0.5292500041531687,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 1,
+      "q2": 2,
+      "order_total": 3,
+      "analytic": 0.5292500041531687,
+      "sympy": 0.5292500041531687,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 2,
+      "q2": 1,
+      "order_total": 3,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 3,
+      "q2": 0,
+      "order_total": 3,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    }
+  ]
+}

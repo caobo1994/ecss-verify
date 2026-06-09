@@ -1,0 +1,10 @@
+{
+  "system": "coupled_ode",
+  "solvers_tested": [
+    "RK45",
+    "BDF",
+    "Radau"
+  ],
+  "max_error": 3.1051025466133364e-11,
+  "pass": true
+}

@@ -1,0 +1,32 @@
+{
+  "system": "RC circuit",
+  "equation": "C v' + v/R = 0",
+  "parameters": {
+    "V0": 5,
+    "R": 1,
+    "C": 1,
+    "t": 1
+  },
+  "sensitivities": [
+    {
+      "order": 0,
+      "analytic": 1.8393972058572117
+    },
+    {
+      "order": 1,
+      "analytic": 1.8393972058572117
+    },
+    {
+      "order": 2,
+      "analytic": -1.8393972058572117
+    },
+    {
+      "order": 3,
+      "analytic": 1.8393972058572117
+    },
+    {
+      "order": 4,
+      "analytic": 1.8393972058572117
+    }
+  ]
+}

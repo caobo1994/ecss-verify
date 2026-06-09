@@ -1,0 +1,14 @@
+{
+  "system": "rc_circuit_index1",
+  "solver": "scipy_Radau_reduced_ODE",
+  "reduction": "algebraic_constraint_eliminated",
+  "V": 5.0,
+  "R": 1.0,
+  "C": 1.0,
+  "nfev": 4036,
+  "elapsed": 0.05710268020629883,
+  "endpoint_error": 3.1086244689504383e-15,
+  "max_state_error": 6.705747068735946e-14,
+  "max_sens_error": 2.255973186038318e-13,
+  "pass": true
+}

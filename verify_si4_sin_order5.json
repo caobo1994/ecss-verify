@@ -1,0 +1,222 @@
+{
+  "label": "Cascade SI-4 (sin, order 5)",
+  "kind": "sin",
+  "p1": 2.0,
+  "p2": 1.5,
+  "t": 0.5,
+  "sympy_reference": "cascade_si4_sin_order5.json",
+  "hand_formula_pass": true,
+  "complex_step_pass": true,
+  "results": [
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 0,
+      "order_total": 0,
+      "analytic": 1.3632775200466682,
+      "sympy": 1.3632775200466682,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 1,
+      "order_total": 1,
+      "analytic": 0.7316888688738209,
+      "sympy": 0.7316888688738209,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 1,
+      "q2": 0,
+      "order_total": 1,
+      "analytic": 0.6816387600233341,
+      "sympy": 0.6816387600233341,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 2,
+      "order_total": 2,
+      "analytic": -0.340819380011667,
+      "sympy": -0.34081938001166706,
+      "diff": 5.551115123125783e-17,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 1,
+      "q2": 1,
+      "order_total": 2,
+      "analytic": 0.36584443443691045,
+      "sympy": 0.36584443443691045,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 2,
+      "q2": 0,
+      "order_total": 2,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 3,
+      "order_total": 3,
+      "analytic": -0.18292221721845525,
+      "sympy": -0.18292221721845522,
+      "diff": 2.7755575615628914e-17,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 1,
+      "q2": 2,
+      "order_total": 3,
+      "analytic": -0.1704096900058335,
+      "sympy": -0.17040969000583353,
+      "diff": 2.7755575615628914e-17,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 2,
+      "q2": 1,
+      "order_total": 3,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 3,
+      "q2": 0,
+      "order_total": 3,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 4,
+      "order_total": 4,
+      "analytic": 0.08520484500291675,
+      "sympy": 0.08520484500291677,
+      "diff": 1.3877787807814457e-17,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 1,
+      "q2": 3,
+      "order_total": 4,
+      "analytic": -0.09146110860922763,
+      "sympy": -0.09146110860922761,
+      "diff": 1.3877787807814457e-17,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 2,
+      "q2": 2,
+      "order_total": 4,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 3,
+      "q2": 1,
+      "order_total": 4,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 4,
+      "q2": 0,
+      "order_total": 4,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 0,
+      "q2": 5,
+      "order_total": 5,
+      "analytic": 0.04573055430461382,
+      "sympy": 0.045730554304613806,
+      "diff": 1.3877787807814457e-17,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 1,
+      "q2": 4,
+      "order_total": 5,
+      "analytic": 0.042602422501458376,
+      "sympy": 0.04260242250145838,
+      "diff": 6.938893903907228e-18,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 2,
+      "q2": 3,
+      "order_total": 5,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 3,
+      "q2": 2,
+      "order_total": 5,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 4,
+      "q2": 1,
+      "order_total": 5,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    },
+    {
+      "var": 1,
+      "q1": 5,
+      "q2": 0,
+      "order_total": 5,
+      "analytic": 0.0,
+      "sympy": 0.0,
+      "diff": 0.0,
+      "pass": true
+    }
+  ]
+}

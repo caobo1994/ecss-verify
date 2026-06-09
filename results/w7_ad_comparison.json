@@ -1,0 +1,10 @@
+{
+  "section": "7.2.4",
+  "title": "Comparison with Modern AD Frameworks",
+  "frameworks_compared": [
+    "Julia ModelingToolkit.jl + DifferentialEquations.jl",
+    "CasADi"
+  ],
+  "key_claim": "No compared framework simultaneously provides SA-supported index handling, arbitrary-order generation, and solver-portable DAE sensitivity equations.",
+  "status": "thesis_support_text"
+}
