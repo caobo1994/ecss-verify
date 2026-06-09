@@ -11,9 +11,15 @@ by Bo Cao (McMaster University, 2026).
 
 This repository provides an independent Python verification suite that reproduces the cross-solver validation results reported in both companion papers, plus additional validation at indices 4--5 beyond what the papers cover.
 
+It also includes a **self-contained reference implementation of the MVTS builder** (`mvts_builder.py`) that demonstrates the operator-overloading automatic differentiation method from Paper 2 on the simple pendulum — zero dependencies beyond Python stdlib.
+
 ## Quick Start
 
 ```bash
+# Run the standalone MVTS builder demo (no dependencies)
+python mvts_builder.py
+
+# Run the full verification suite
 pip install numpy scipy
 python run_all.py
 ```
@@ -33,15 +39,13 @@ python run_all.py
 ## Structure
 
 ```
-├── ecss_utils.py              # Core utilities (MVTS helpers, DAE definitions)
-├── pryce_sa.py                # Independent Python implementation of Pryce SA
-├── run_all.py                 # Master test runner
-├── requirements.txt           # Python dependencies
-├── results/                   # JSON output files
-├── verify_cross_solver_high_index.py
-├── verify_structure.py        # Σ-matrix and Jacobian structure checks
-├── cross_solver_pendulum.py
-├── cross_solver_ecss_pendulum.json   # Cross-solver results
+├── mvts_builder.py             # Standalone MVTS builder + pendulum demo
+├── ecss_utils.py               # Core utilities (MVTS helpers, DAE definitions)
+├── pryce_sa.py                 # Independent Python implementation of Pryce SA
+├── run_all.py                  # Master test runner
+├── verify_structure.py         # Σ-matrix and Jacobian structure checks
+├── cross_solver_pendulum.py    # Cross-solver validation scripts
+├── results/                    # JSON output files
 └── ...
 ```
 
@@ -49,9 +53,9 @@ python run_all.py
 
 This Python suite **complements** the C++ ECSS builder implementation:
 
-- ECSS equations are manually derived for each test system (the C++ builder handles auto-generation via MVTS arithmetic)
-- SciPy integration uses analytically index-reduced ODE forms; the DAETS solver handles the original DAE structure directly
-- Structural inheritance is verified by inspecting system structure, not by a full SA implementation
+- **MVTS auto-generation:** The standalone `mvts_builder.py` demonstrates symbolic ECSS generation via MVTS arithmetic for the simple pendulum. The C++ builder generalises this to arbitrary DAEs with template-based operator overloading.
+- SciPy integration uses analytically index-reduced ODE forms; the DAETS solver handles the original DAE structure directly.
+- Structural inheritance is verified by inspecting system structure via `pryce_sa.py`, an independent Python implementation of Pryce's Σ-method.
 
 ## Citation
 
