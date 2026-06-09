@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
 Master runner for ECSS Python validation suite.
-Addresses all key weaknesses from the PhD defence review.
+
+Companion verification for:
+  Paper 1: Structural Inheritance in Sensitivity Systems of DAEs
+  Paper 2: Automatic Generation of Sensitivity Systems for DAEs
+           via Multivariate Taylor Series
+  by Bo Cao (McMaster University, 2026)
 
 Usage:
     python run_all.py              # Run all tests
-    python run_all.py --quick      # Run only must-do tests (index 4-5 + solver indep)
-    python run_all.py --test W1    # Run specific weakness test
+    python run_all.py --quick      # Run only must-do tests
+    python run_all.py --test W1    # Run specific test
 """
 import sys
 import os
@@ -141,7 +146,9 @@ def main():
     # Header
     print("=" * 70)
     print("  ECSS Python Validation Suite")
-    print("  Addressing PhD Defence Review Weaknesses")
+    print("  Companion verification for:")
+    print("    Paper 1: Structural Inheritance in Sensitivity Systems of DAEs")
+    print("    Paper 2: ECSS Builder via Multivariate Taylor Series")
     print(f"  Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"  Tests: {', '.join(selected.keys())}")
     print("=" * 70)
@@ -188,20 +195,22 @@ def main():
     n_total = len(results)
     print(f"\n  {n_pass}/{n_total} tests passed in {total_elapsed:.1f}s")
 
-    # Recommendations
+    # Summary
     print(f"\n{'─' * 70}")
-    print("  EVIDENCE TO CITE IN THESIS")
+    print("  PAPER EVIDENCE")
     print(f"{'─' * 70}")
     if results.get('W1', {}).get('pass'):
-        print("  ✓ W1 passed → Cite §7.1 high-index validation")
-        print("    Cite: Hessenberg chain systems, g(t,p) = sin(pt) and exp(pt)")
+        print("  ✓ W1 passed → high-index validation (Paper 1, index 4--5)")
     if results.get('W2', {}).get('pass'):
-        print("  ✓ W2 passed → Cite §8.2 DAE-origin solver-independence check")
-        print("    Cite: RC circuit ECSS algebraically reduced and integrated with SciPy Radau")
+        print("  ✓ W2 passed → solver-independence check (Paper 2, Section 7)")
     if results.get('W3', {}).get('pass'):
-        print("  ✓ W3 passed → Cite coupled N=1,2 pendulum-chain validation")
+        print("  ✓ W3 passed → coupled N-pendulum validation (Paper 2, Section 8)")
+    if results.get('W4', {}).get('pass'):
+        print("  ✓ W4 passed → consistent-point inheritance (Paper 1, Lemma 3)")
     if results.get('W5', {}).get('pass'):
-        print("  ✓ W5 passed → Cite runtime breakdown evidence in §8.3")
+        print("  ✓ W5 passed → runtime composition (Paper 2, Section 8)")
+    if results.get('W7', {}).get('pass'):
+        print("  ✓ W7 passed → AD framework comparison (Paper 2, Section 1)")
 
     print(f"\n  Results saved to: {os.path.join(os.path.dirname(__file__), 'results/')}")
 
