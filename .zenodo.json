@@ -1,0 +1,25 @@
+{
+    "title": "ECSS Verification Suite — Structural Inheritance and ECSS Builder Papers",
+    "description": "Companion verification code and two journal papers from Bo Cao's PhD thesis: (1) Structural Inheritance in Sensitivity Systems of DAEs — proves that adding sensitivity equations preserves Σ-matrix, offsets, and Jacobian identically; (2) Automatic Generation of Sensitivity Systems for DAEs via MVTS — presents the ECSS builder using operator-overloading AD. Includes Python verification suite for all structural inheritance claims across 10 test systems (indices 0–5).",
+    "creators": [
+        {
+            "name": "Cao, Bo",
+            "affiliation": "McMaster University",
+            "orcid": "0000-0000-0000-0000"
+        }
+    ],
+    "keywords": [
+        "differential-algebraic equations",
+        "sensitivity analysis",
+        "structural analysis",
+        "Sigma-method",
+        "structural inheritance",
+        "multivariate Taylor series",
+        "automatic differentiation",
+        "ECSS",
+        "DAE"
+    ],
+    "license": "MIT",
+    "upload_type": "publication",
+    "publication_type": "thesis"
+}
