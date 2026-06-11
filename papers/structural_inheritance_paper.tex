@@ -1,0 +1,617 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{hyperref}
+\usepackage[capitalize,noabbrev]{cleveref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% Notation — extracted from thesis preamble
+\newcommand{\vx}{\mathbf{x}}
+\newcommand{\vp}{\mathbf{p}}
+\newcommand{\vq}{\mathbf{q}}
+\newcommand{\vr}{\mathbf{r}}
+\newcommand{\vs}{\mathbf{s}}
+\newcommand{\vc}{\mathbf{c}}
+\newcommand{\vd}{\mathbf{d}}
+\newcommand{\vF}{\mathbf{F}}
+\newcommand{\Jb}{\mathbf{J}}
+\newcommand{\vzero}{\mathbf{0}}
+\newcommand{\vy}{\mathbf{y}}
+\newcommand{\vg}{\mathbf{g}}
+\newcommand{\vphi}{\boldsymbol{\phi}}
+\newcommand{\vh}{\mathbf{h}}
+\newcommand{\vX}{\mathbf{X}}
+\newcommand{\vlambda}{\boldsymbol{\lambda}}
+\newcommand{\valpha}{\boldsymbol{\alpha}}
+\newcommand{\vbeta}{\boldsymbol{\beta}}
+\newcommand{\D}[2]{\frac{\partial^{\,#2}}{\partial #1^{\,#2}}}
+\newcommand{\derof}[2]{\mathcal{D}_{#1}\!\left(#2\right)\!}
+
+\title{\bfseries Structural Inheritance in Sensitivity Systems of Differential-Algebraic Equations\thanks{Submitted for publication.}}
+\author{Bo Cao\thanks{School of Computational Science and Engineering, McMaster University, Hamilton, ON, Canada. Email: caobo19940411@gmail.com}}
+\date{2026}
+\newcommand{\keywords}[1]{\noindent\textbf{Keywords:} #1}
+\newcommand{\MSC}[1]{\noindent\textbf{MSC Classification:} #1}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\emergencystretch=1em
+We prove that adding sensitivity equations to a parametrised differential-algebraic equation (DAE) preserves its structural properties identically. Under the standing hypotheses of real analyticity and locally constant structural data, the $\Sigma$-matrix (signature matrix), canonical offsets, and system Jacobian of every sensitivity equation equal those of the original DAE. The complete sensitivity system (CSS) Jacobian is block lower-triangular with $N(\vq)$ diagonal blocks, each equal to the original system Jacobian $J$, giving determinant $(\det J)^{N(\vq)}$. This result---the \emph{structural inheritance theorem}---implies that whenever Pryce's structural analysis succeeds on the original DAE, it succeeds on the complete sensitivity system for any finite index and any requested finite sensitivity order, without further structural derivation. The proof proceeds in stages: existence of sensitivities via the implicit function theorem, dependence ordering via operator decomposition, preservation of the $\Sigma$-matrix and offsets for first-order and higher-order equations, preservation of the system Jacobian, extension to the block lower-triangular CSS Jacobian, and consistent-point inheritance. Numerical confirmation on test systems spanning indices~0 through~5 verifies the predicted block structure, offset repetition, and Jacobian determinant identity, with errors at the level of floating-point roundoff ($\le 10^{-14}$).
+\end{abstract}
+\emergencystretch=0pt
+
+\keywords{differential-algebraic equation, sensitivity analysis, structural analysis, $\Sigma$-method, structural inheritance, complete sensitivity system}
+\MSC{65L80, 34A09, 65L05, 34A55}
+
+%=====================================================================
+\section{Introduction}
+%=====================================================================
+
+Differential-algebraic equations (DAEs) arise in the modelling of constrained dynamical systems: mechanical multibody systems~\cite{arnold1995numerical}, electrical circuits~\cite{gunther2000differential}, and chemical processes~\cite{pantelides1988consistent}. When these models depend on parameters $\vp = (p_1,\dots,p_m)$, computing how the solution changes with respect to those parameters---\emph{sensitivity analysis}---is essential for optimisation, uncertainty quantification, and model calibration~\cite{rabitz1999efficient}.
+
+Existing methods for DAE sensitivity analysis are limited in three ways. First, they are restricted to index~1 or specially structured index~2 forms~\cite{li2000sensitivity,cao2002adjoint,cao2003adjoint,rauh2017sensitivity}. The controlled pendulum and multibody dynamics routinely produce index-3 systems for which no general sensitivity tool exists. Second, they compute at most second-order sensitivities~\cite{barrio2006sensitivity}, while methods exploiting higher-order Taylor expansions require arbitrary-order derivatives. Third, sensitivity equations are typically hard-wired into particular solvers (SUNDIALS~\cite{gardner2022sundials}, Barrio's MVTS~\cite{barrio2006sensitivity}), preventing reuse with different integrators.
+
+The central question we address is: \emph{if a DAE is solvable, is its sensitivity system also solvable?} More precisely: does adding sensitivity equations change the structural properties on which Pryce-style DAE solvers depend? We prove that the answer is no---through the structural inheritance theorem.
+
+\medskip\noindent\textbf{Related work.}
+El-Sheikh \& Wiechert~\cite{elsheikh2018structural} proved that the \emph{index} of the first-order sensitivity equation equals that of the original DAE. This guarantees solvability at the index level but does not describe how the full structural objects ($\Sigma$-matrix, offsets, Jacobian) behave under parameter differentiation. This paper proves a stronger result: the $\Sigma$-matrix, canonical offsets, and system Jacobian are preserved \emph{identically}, for \emph{any} sensitivity order. Table~\ref{tab:comparison} summarises the differences.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Structural results for DAE sensitivity equations.}
+  \label{tab:comparison}
+  \begin{tabular}{lcc}
+    \toprule
+    Result & El-Sheikh \& Wiechert~\cite{elsheikh2018structural} & This paper \\
+    \midrule
+    Index of first-order SE equals original index & Yes & Yes \\
+    $\Sigma$-matrix preserved identically & No & \textbf{Yes} \\
+    Canonical offsets $(\vc,\vd)$ preserved & No & \textbf{Yes} \\
+    System Jacobian $J$ preserved & No & \textbf{Yes} \\
+    Block lower-triangular CSS Jacobian & No & \textbf{Yes} \\
+    $\det(J_{\text{CSS}}) = (\det J)^{N(\vq)}$ & No & \textbf{Yes} \\
+    Arbitrary sensitivity order ($\vq > 1$) & No ($\vq=1$ only) & \textbf{Yes} \\
+    Consistent-point inheritance & No & \textbf{Yes} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\medskip\noindent\textbf{Contributions.}
+This paper makes the following contributions:
+\begin{enumerate}[nosep]
+  \item We prove existence of sensitivities for real-analytic parametrised DAEs under structural analysis (Theorem~\ref{thm:existence}), establishing that the solution is jointly real-analytic in time and parameters.
+  \item We prove the structural inheritance theorem (Theorems~\ref{thm:same_sigma}--\ref{thm:jacobian_shape}): the $\Sigma$-matrix, canonical offsets, and system Jacobian are preserved identically across all sensitivity orders; the CSS Jacobian is block lower-triangular with $\det = (\det J)^{\,N(\vq)}$; and a consistent point for the original DAE extends to one for the CSS.
+  \item We provide numerical validation on index~0 through~5 systems, confirming the predicted structural preservation on every test case.
+\end{enumerate}
+
+The controlled pendulum (index~3, $n=3$, one parameter) serves as the running example throughout.
+
+%=====================================================================
+\section{Background: DAEs and Pryce's Structural Analysis}
+%=====================================================================
+
+We briefly recall the essential concepts; for a full treatment see~\cite{pryce2001simple}.
+
+\subsection{Parametrised DAEs}
+
+We consider a system of $n$ equations $f_i$ in $n$ dependent variables $x_j = x_j(t)$:
+\begin{equation}\label{eq:DAE}
+  f_i\bigl(t, \text{the time derivatives of } x_1,\dots,x_n\bigr) = 0,\qquad i = 1:n,
+\end{equation}
+where each $f_i$ may contain the differentiation operator $\mathrm{d}/\mathrm{d}t$, arithmetic operations, and elementary functions. Let $\derof{i}{x_j}$ denote the set of time derivatives of $x_j$ up to the highest order that appears in $f_i$. When the system depends on $m$ real parameters $\vp = (p_1,\dots,p_m)$, we write
+\begin{equation}\label{eq:pDAE}
+  f_i\bigl(t, \derof{i}{x_j}, \vp\bigr) = 0,\qquad i,j = 1:n,
+\end{equation}
+and refer to~\eqref{eq:pDAE} as a \emph{parametrised DAE} (pDAE).
+
+\begin{definition}[Sensitivity order]
+For $\vp = (p_1,\dots,p_m)$, a \emph{sensitivity order} is a non-negative integer vector $\vq = (q_1,\dots,q_m)$. The sensitivity of variable $x$ of order $\vq$ is
+\[
+  \frac{\partial^{\vq} x}{\partial \vp^{\vq}}
+  = \frac{\partial^{q_1}}{\partial p_1^{q_1}} \cdots
+    \frac{\partial^{q_m}}{\partial p_m^{q_m}}\,x.
+\]
+\end{definition}
+
+\begin{definition}[Complete Sensitivity System]
+For a sensitivity order $\vq$, the \emph{CSS} $C(\vq)$ comprises all sensitivity equations of orders $\vr \le \vq$ (component-wise):
+\[
+  C(\vq) = \{\,\vr\in\mathbb{N}_0^m \mid \vr\le\vq\,\},\qquad
+  N(\vq) := |C(\vq)| = \prod_{i=1}^m (q_i+1).
+\]
+The CSS contains $n N(\vq)$ equations in $n N(\vq)$ variable groups, ordered lexicographically by $\vr$; the original DAE ($\vr=\vzero$) occupies the first block.
+\end{definition}
+
+\subsection{Pryce's Structural Analysis}
+
+Pryce's $\Sigma$-method~\cite{pryce2001simple} extracts structural properties from the pattern of derivatives alone.
+
+\begin{definition}[$\Sigma$-matrix]
+The $\Sigma$-matrix of~\eqref{eq:DAE} is an $n\times n$ matrix where $\sigma_{ij}$ is the highest-order time derivative of $x_j$ appearing in $f_i$, or $-\infty$ if no derivative of $x_j$ appears in $f_i$.
+\end{definition}
+
+\begin{definition}[Highest-value transversal]
+A transversal $T$ of $\Sigma$ is a set of $n$ positions $\{(i,j_i)\mid i=1:n\}$ with distinct rows and columns. A \emph{HVT} maximises $\sum_{(i,j)\in T}\sigma_{ij}$ over all transversals with no $-\infty$ entries.
+\end{definition}
+
+\begin{definition}[Canonical offsets]
+The canonical offsets $\vc = (c_1,\dots,c_n)$ and $\vd = (d_1,\dots,d_n)$ satisfy: (i)~$d_j - c_i \ge \sigma_{ij}$ for all $i,j$, (ii)~$d_j - c_i = \sigma_{ij}$ for all $(i,j)$ in some HVT, and (iii)~$\min_i c_i = 0$. They are the unique solution to the linear assignment problem~\cite{pryce2001simple}.
+\end{definition}
+
+\begin{definition}[System Jacobian]
+The system Jacobian $\Jb$ is
+\[
+  J_{ij} =
+  \begin{cases}
+    \displaystyle\frac{\partial f_i}{\partial x_j^{(\sigma_{ij})}},
+      & \text{if } \sigma_{ij} = d_j - c_i, \\[8pt]
+    0, & \text{otherwise}.
+  \end{cases}
+\]
+Pryce~\cite{pryce2001simple} proves that $J_{ij} = \partial f_i^{(c_i)} / \partial x_j^{(d_j)}$, where ${(c_i)}$ denotes $c_i$-fold time differentiation.
+\end{definition}
+
+\subsection{Running Example: The Controlled Pendulum}
+
+The controlled pendulum~\cite{campbell2016solving} is an index-3 DAE with $n=3$, parameter $u$:
+\begin{equation}\label{eq:pendulum}
+  \begin{aligned}
+    x'' + \lambda x + a x' - u y &= 0, \\
+    y'' + \lambda y + a y' + g + u x &= 0, \\
+    x^2 + y^2 - L^2 &= 0.
+  \end{aligned}
+\end{equation}
+Its $\Sigma$-matrix is
+\[
+  \Sigma =
+  \begin{pmatrix}
+    2 & 0 & 0 \\
+    0 & 2 & 0 \\
+    0 & 0 & -\infty
+  \end{pmatrix},
+\]
+with canonical offsets $\vc=(0,0,2)$, $\vd=(2,2,0)$. The equation offset $c_3=2$ indicates that the algebraic constraint must be differentiated twice to expose hidden constraints.
+
+%=====================================================================
+\section{Standing Hypotheses}
+%=====================================================================
+
+Throughout we assume:
+
+\begin{enumerate}[label=(H\arabic*)]
+  \item \textbf{Real analyticity.} The pDAE $\vF(t,\derof{}\vx,\vp)=\vzero$ is real-analytic in $(t,\derof{}\vx,\vp)$ on an open neighbourhood of the reference point $(t^*,\derof{}\vx^*,\vp^*)$.
+  \item \textbf{Structural analysis (SA) succeeds.} Pryce's SA produces finite offsets $(c_i),(d_j)$ and a finite HVT at $(t^*,\derof{}\vx^*,\vp^*)$.
+  \item \textbf{Locally constant structural data.} The $\Sigma$-matrix, selected HVT, canonical offsets, and the sparsity pattern of the system Jacobian (which entries are structurally non-zero) remain constant on an open neighbourhood of the reference point.
+  \item \textbf{Nonsingular system Jacobian.} The system Jacobian $\partial\vF_{I_0}/\partial\vx_{J_0}$ is nonsingular at the reference point, where $\vF_{I_0}$ and $\vx_{J_0}$ are defined in~\S\ref{sec:existence} below.
+\end{enumerate}
+
+The controlled pendulum satisfies all four: (H1) it is polynomial, hence real-analytic everywhere; (H2)--(H3) the offsets are finite and constant away from index-change manifolds; (H4) the $3\times 3$ Jacobian has nonzero determinant at any consistent point.
+
+%=====================================================================
+\section{Existence of Sensitivities}\label{sec:existence}
+%=====================================================================
+
+Let $\vx_{J_0} = (x_j^{(d_j)}\mid j=1:n)$ collect the \emph{leading derivatives} and $\vx_{J_<} = (x_j^{(k)}\mid 0\le k < d_j)$ collect the \emph{lower-order derivatives}. Let $\vF_{I_0} = (f_i^{(c_i)}\mid i=1:n)$ denote the $c_i$-fold differentiated equations. The system Jacobian is $\Jb = \partial\vF_{I_0}/\partial\vx_{J_0}$.
+
+The Pryce offset inequalities guarantee $\sigma_{ij} + c_i \le d_j$ for all $i,j$, with equality on the HVT. Hence $\vF_{I_0}$ involves derivatives of $x_j$ up to order at most $d_j$, and never higher.
+
+The equation system $\vF_{I_0}(t,\vx_{J_<},\vx_{J_0},\vp)=\vzero$ has $n$ equations in $n$ unknowns $\vx_{J_0}$, with Jacobian $\Jb$ nonsingular by (H4). By (H1), $\vF_{I_0}$ is real-analytic. The real-analytic implicit function theorem~\cite{krantz2002implicit} yields a unique real-analytic mapping $\vphi(t,\vx_{J_<},\vp)$ such that $\vF_{I_0}(t,\vx_{J_<},\vphi,\vp)=\vzero$. The kinematic identities $(x_j^{(k)})' = x_j^{(k+1)}$ for $k=0,\dots,d_j-2$ together with $(x_j^{(d_j-1)})' = \phi_j(t,\vx_{J_<},\vp)$ define a first-order parametric ODE $\vy' = \vg(t,\vy,\vp)$ with real-analytic right-hand side.
+
+\begin{theorem}[Existence of sensitivities]
+\label{thm:existence}
+Under (H1)--(H4), there exist open neighbourhoods of $t^*$ and $\vp^*$ on which the pDAE solution $\vx(t,\vp)$ is jointly real-analytic in $t$ and $\vp$, provided the lower-order initial data $\vx_{J_<}^*$ are either independent of $\vp$ or depend real-analytically on $\vp$. Consequently, all mixed partial derivatives $\partial^{\vq}\vx/\partial\vp^{\vq}$ exist and commute.
+\end{theorem}
+
+\begin{proof}
+The system $\vy'=\vg(t,\vy,\vp)$ is a first-order parametric ODE with real-analytic right-hand side. Standard ODE theory~\cite{coddington1955theory,hairer1993solving} guarantees that for initial data depending real-analytically on $\vp$, the solution depends jointly real-analytically on $(t,\vp)$. Each component of $\vx$ is either a component of $\vx_{J_<}$ or a time derivative thereof, so joint analyticity carries over. The theorem is local at $(t^*,\vp^*)$; extension over a finite interval is obtained stepwise while (H1)--(H4) hold~\cite{pryce2001simple,nedialkov2008solving}.
+\end{proof}
+
+%=====================================================================
+\section{Dependence Structure}\label{sec:structural}
+%=====================================================================
+
+Let $\D{\vp}{\vq} = \partial^{\,q_1}/\partial p_1^{q_1} \cdots \partial^{\,q_m}/\partial p_m^{q_m}$ denote the mixed-partial derivative operator, and let $\mathbf{e}_k\in\mathbb{N}_0^m$ be the $k$-th standard basis vector. Commutativity of mixed partials~\cite{krantz2002implicit} under (H1) gives the additive composition property:
+\begin{equation}\label{eq:additive}
+  \D{\vp}{\vr+\vs}\vF = \D{\vp}{\vr}(\D{\vp}{\vs}\vF).
+\end{equation}
+
+\begin{theorem}[Dependence ordering]
+\label{thm:appear}
+Let $\vx_\vr$ denote the collection of sensitivity variables of order $\vr$. Then the sensitivity equation of order $\vq$ may contain $\vx_\vr$ only if $\vr \leq \vq$ (component-wise).
+\end{theorem}
+
+\begin{proof}
+We prove the contrapositive. Assume $\vx_\vr$ appears in the SE of order $\vq$ but $\vr \nleq \vq$, so $r_k > q_k$ for some $k$. Define $\vs$ by $s_i = \min(q_i, r_i)$; then $\vs \leq \vq$, $\vs \leq \vr$. Set $\vq' = \vq - \vs$, $\vr' = \vr - \vs$, with $q'_k = 0$ and $r'_k > 0$.
+
+Since $q'_k = 0$, the $\vq'$-order SE has no $p_k$-differentiation: $\D{\vp}{\vq'}$ applies no $\frac{\partial}{\partial p_k}$. By the chain rule, a sensitivity variable $\partial^{a}x/\partial p_k^{a}$ with $a>0$ can appear only if the operator includes at least one $p_k$-derivative. Hence no sensitivity variable of positive order in $p_k$ can appear in $\D{\vp}{\vq'}\vF$; in particular, $\vx_{\vr'}$ cannot appear.
+
+By~\eqref{eq:additive}, $\D{\vp}{\vq}\vF = \D{\vp}{\vs}(\D{\vp}{\vq'}\vF)$. The outer operator $\D{\vp}{\vs}$ contributes at most $s_k = q_k$ $p_k$-derivatives via the chain rule. Since the inner system contains no variable exceeding $q'_k=0$ $p_k$-derivatives, the total $p_k$-order is at most $q_k < r_k$. Therefore $\vx_{\vr'+\vs} = \vx_\vr$ cannot appear, contradiction.
+\end{proof}
+
+Theorem~\ref{thm:appear} establishes that the CSS has a lower-triangular dependence structure: equations of a given order depend only on sensitivity variables of equal or lower order. This is the key to the block-triangular Jacobian.
+
+%=====================================================================
+\section{Preservation of the $\Sigma$-Matrix and Offsets}
+%=====================================================================
+
+The first-order sensitivity equation with respect to $p_k$ is obtained by total differentiation:
+\begin{equation}\label{eq:first_order_SE}
+  f_{i,p_k} = \sum_{j=1}^n \sum_{\ell=0}^{\sigma_{ij}}
+    \frac{\partial f_i}{\partial x_j^{(\ell)}}\, x_{j,p_k}^{(\ell)}
+    + \frac{\partial f_i}{\partial p_k}
+    = 0,\qquad i=1:n.
+\end{equation}
+
+\begin{theorem}[$\Sigma$-matrix preservation]
+\label{thm:same_sigma}
+The $\Sigma$-matrix of the original system, $\Sigma$, is identical to that of the first-order SE, denoted $\Sigma'$.
+\end{theorem}
+
+\begin{proof}
+From~\eqref{eq:first_order_SE}, for any $i,j,\ell$,
+\[
+  \frac{\partial (\frac{\partial}{\partial p_k} f_i)}{\partial x_{j,p_k}^{(\ell)}}
+  = \frac{\partial f_i}{\partial x_j^{(\ell)}} .
+\]
+Where $\partial f_i/\partial x_j^{(\ell)} \neq 0$, the same derivative order appears in the SE, so $\sigma'_{ij} \ge \sigma_{ij}$. Since differentiating with respect to $p_k$ cannot introduce higher-order time derivatives, $\sigma'_{ij} \le \sigma_{ij}$. Hence $\sigma_{ij} = \sigma'_{ij}$.
+\end{proof}
+
+\smallskip\noindent
+\textbf{Why this matters.} Theorem~\ref{thm:same_sigma} means structural analysis need only succeed once: the $\Sigma$-matrix of every sensitivity equation is identical to the original, so no new transversal computation is required. For the controlled pendulum, the $\Sigma$-matrix of the first-order sensitivity equation is therefore $\left[\begin{smallmatrix}2&0&0\\0&2&0\\0&0&-\infty\end{smallmatrix}\right]$---the sensitivity constraint equation $f_{3,p}$ still contains only undifferentiated position variables $x_p$ and $y_p$, exactly as the original constraint $f_3$ contains only undifferentiated $x$ and $y$; the coupling between the two dynamics equations and each other's position variables ($-uy$ in $f_1$ and $+ux$ in $f_2$) is also inherited identically.
+
+\begin{lemma}[Offset preservation]
+\label{lem:offsets}
+The canonical offsets of any sensitivity equation equal $(\vc,\vd)$.
+\end{lemma}
+
+\begin{proof}
+Let $(\vc,\vd)$ be canonical offsets for $\Sigma$. Since $\Sigma'=\Sigma$ (Theorem~\ref{thm:same_sigma}), the same pair satisfies the feasibility inequalities $d_j - c_i \ge \sigma'_{ij}$ for all $i,j$.
+
+For tightness on an HVT: any HVT of $\Sigma'$ is also an HVT of $\Sigma$, so the equalities $d_j - c_i = \sigma'_{ij}$ transfer directly.
+
+For minimality: suppose $(\tilde{\vc},\tilde{\vd})$ is a feasible pair for $\Sigma'$ with $\tilde{c}_i \le c_i$ and $\tilde{d}_j \le d_j$ and at least one strict inequality. Then it is also feasible for $\Sigma$, contradicting the minimality of $(\vc,\vd)$. Therefore $(\vc,\vd)$ is canonical for $\Sigma'$.
+\end{proof}
+
+\smallskip\noindent
+\textit{Remark.} The argument does not depend on which HVT is selected: the canonical offsets are the unique solution to the linear assignment problem $\arg\min_{(\vc,\vd)} \sum_i c_i + \sum_j d_j$ subject to the Pryce inequalities on $\Sigma$~\cite{pryce2001simple}. Since $\Sigma' = \Sigma$, the same unique minimiser serves both matrices, regardless of HVT choice.
+
+\begin{theorem}[Induction to arbitrary order]
+\label{thm:induction}
+For any $\vq$, the $\Sigma$-matrix and offsets of the $\vq$-order SE are identical to those of the original DAE.
+\end{theorem}
+
+\begin{proof}
+By induction on $|\vq|$. Base case $|\vq|=1$: \cref{thm:same_sigma} and~\cref{lem:offsets}. Inductive step: write $\vq = \vr + \mathbf{e}_k$. By~\eqref{eq:additive}, the $\vq$-order SE is one additional $p_k$-differentiation of the $\vr$-order SE. By the inductive hypothesis, the $\vr$-order SE has $\Sigma$-matrix $\Sigma$ and offsets $(\vc,\vd)$. Applying the base case argument to this system preserves both---the base case proof depends only on the $\Sigma$-matrix equality and the chain rule, which hold for any DAE whose $\Sigma$-matrix and offsets are known.
+\end{proof}
+
+\smallskip\noindent
+\textbf{Significance.} The induction result guarantees that structural inheritance holds for arbitrary sensitivity orders, not just first-order. Combined with Theorem~\ref{thm:same_sigma}, it establishes that the $\Sigma$-matrix and offsets are preserved identically across the entire CSS---a property that no prior sensitivity method for DAEs exploits. This preservation is what makes automatic generation possible: the same structural analysis that makes the original DAE solvable guarantees solvability of every sensitivity equation. (Numerical validation for representative DAE systems currently extends to sensitivity order~2; order~3 is checked on the simple pendulum, and higher DAE orders rest on this structural proof. ODE correctness is checked through order~5.)
+
+\begin{theorem}[Structure of the combined $\Sigma$-matrix]
+\label{thm:combined_sigma}
+For the combined system (original DAE + first-order SE), the $\Sigma$-matrix is block lower-triangular:
+\[
+  \Sigma_{\text{comb}} =
+  \begin{bmatrix}
+    \Sigma & -\infty \\
+    A      & \Sigma
+  \end{bmatrix},
+\]
+where $A_{ij}\le\sigma_{ij}$ for all $i,j$, and if $\sigma_{ij} = -\infty$ then $A_{ij} = -\infty$. The top-right $-\infty$ block reflects that original equations contain no sensitivity variables of order $\ge 1$.
+\end{theorem}
+
+\begin{proof}
+If $x_j^{(\ell)}$ does not appear in $f_i$, then $\partial f_i/\partial x_j^{(\ell)} = 0$. Differentiating with respect to $p_k$ yields
+\[
+\frac{\partial (\frac{\partial}{\partial p_k} f_i)}{\partial x_j^{(\ell)}} = 0 .
+\]
+Thus $x_j^{(\ell)}$ cannot newly appear in $\frac{\partial}{\partial p_k} f_i$. Therefore $A_{ij} \le \sigma_{ij}$, and if $\sigma_{ij} = -\infty$ then $A_{ij} = -\infty$.
+\end{proof}
+
+\begin{theorem}[Offsets of the combined system]
+\label{thm:canonical}
+The canonical offsets of the combined system are $(\vc,\dots,\vc)$ and $(\vd,\dots,\vd)$ (each repeated $N(\vq)$ times).
+\end{theorem}
+
+\begin{proof}
+\textit{Feasibility.} The diagonal blocks each inherit $(\vc,\vd)$ from $\Sigma$. The top-right block contains $-\infty$, so its inequalities are vacuous. For the bottom-left block, Theorem~\ref{thm:combined_sigma} shows that $A_{ij}\le\sigma_{ij}$, ensuring feasibility.
+
+\textit{Tightness.} An HVT of a block lower-triangular matrix is a union of HVTs of its diagonal blocks~\cite{golub2013matrix}. Tightness therefore follows from tightness on each diagonal block~$\Sigma$.
+
+\textit{Minimality.} If $(\tilde{\vc},\tilde{\vd})$ were a feasible pair with strictly smaller offsets, projecting to either diagonal block would contradict the canonicity of $(\vc,\vd)$.
+\end{proof}
+
+%=====================================================================
+\section{Preservation of the System Jacobian}
+%=====================================================================
+
+\begin{theorem}[Jacobian preservation]
+\label{thm:jacobian}
+The system Jacobian $J'$ of any sensitivity equation equals $J$.
+\end{theorem}
+
+\begin{proof}
+The system Jacobian is defined in terms of the $\Sigma$-matrix and canonical offsets. Since $\Sigma'=\Sigma$ and the offsets are identical, the chain rule gives
+\[
+  \frac{\partial(\frac{\partial}{\partial p_k}f_i^{(c_i)})}{\partial x_{j,p_k}^{(d_j)}}
+  = \frac{\partial f_i^{(c_i)}}{\partial x_j^{(d_j)}} = J_{ij},
+\]
+so each entry equals $J_{ij}$ structurally and numerically. The inhomogeneous term $\partial f_i/\partial p_k$ in~\eqref{eq:first_order_SE} does not affect the system Jacobian: it contains no $x_{j,p_k}^{(d_j)}$ derivative. Theorem~\ref{thm:induction} extends this to all orders.
+\end{proof}
+
+%=====================================================================
+\section{Structure of the CSS Jacobian}
+%=====================================================================
+
+\begin{theorem}[Jacobian structure of the CSS]
+\label{thm:jacobian_shape}
+For order $\vq$, the CSS Jacobian $J_{C(\vq)}$ is:
+\begin{enumerate}[nosep]
+  \item \textbf{Block lower-triangular}, with $N(\vq)$ diagonal blocks.
+  \item \textbf{All diagonal blocks equal $J$}.
+  \item $\det(J_{C(\vq)}) = (\det J)^{\,N(\vq)}$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+The block lower-triangular structure follows from the dependence ordering established in Theorem~\ref{thm:appear}: variables of order $\vr$ appear only in equations of order $\vs \ge \vr$. Arranging the sensitivity orders in any topological ordering of the componentwise partial order $\vr \le \vs$ (which forms a directed acyclic graph on the finite set of sensitivity orders), resolving incomparable orders lexicographically if needed, produces the block lower-triangular ordering.
+
+We now show that every diagonal block equals $J$ by induction on the total order $|\vs|$.
+
+\emph{Base case} ($|\vs| = 0$). The order $\vs = \vzero$ corresponds to the original DAE, whose Jacobian is $J$ by definition.
+
+\emph{Inductive step.} Assume that for all orders $\vr$ with $|\vr| < |\vs|$, the $\vr$-order diagonal block equals $J$. Write $\vs = \vr + \mathbf{e}_k$, so that $|\vr| = |\vs| - 1$. By~\eqref{eq:additive}, the $\vs$-order SE is obtained by differentiating the $\vr$-order SE with respect to $p_k$. Applying Theorem~\ref{thm:jacobian} to the $\vr$-order system (which, by the inductive hypothesis, has Jacobian $J$) shows that the $\vs$-order system also has Jacobian $J$. Thus every diagonal block equals $J$.
+
+For the determinant: a block lower-triangular matrix has determinant equal to the product of its diagonal-block determinants~\cite{golub2013matrix}. Since there are $N(\vq)$ such blocks, each equal to $J$, we obtain $\det(J_{C(\vq)}) = (\det J)^{\,N(\vq)}$. (The off-diagonal blocks do not affect the determinant: for any block lower-triangular matrix $\bigl[\begin{smallmatrix} J & 0 \\ * & J \end{smallmatrix}\bigr]$, $\det = (\det J)^2$ regardless of the content of the $*$ block.)
+\end{proof}
+
+The block lower-triangular pattern extends to $N(\vq)$ diagonal blocks:
+\[
+J_{C(\vq)} =
+\begin{bmatrix}
+J      & 0      & 0      & \cdots & 0 \\
+J_{10} & J      & 0      & \cdots & 0 \\
+J_{20} & J_{21} & J      & \cdots & 0 \\
+\vdots & \vdots & \vdots & \ddots & \vdots \\
+J_{k0} & J_{k1} & J_{k2} & \cdots & J
+\end{bmatrix},
+\qquad k = N(\vq)-1.
+\]
+The off-diagonal blocks $J_{rs}$ couple variables of order $s$ into equations of order $r$ ($r > s$); the zero blocks reflect Theorem~\ref{thm:appear}.
+
+\smallskip\noindent
+\textbf{Practical consequence.} Theorem~\ref{thm:jacobian_shape} is the formal reason why the ECSS does not require a new structural-analysis theory: the ECSS builder does not need to rediscover the leading-derivative structure of each sensitivity equation. The same structural objects computed for the original DAE can be reused blockwise for the sensitivity system. Parameter differentiation can introduce additional lower-order coupling terms, but it does not introduce higher time derivatives of the sensitivity variables than those already present in the original DAE's leading structure. Consequently, structural analysis need only succeed once on the original DAE; every sensitivity system inherits the structural solvability conditions, and the CSS can be supplied to any compatible SA-based solver in the same modelling form as the original DAE---without deriving solver-specific sensitivity equations.
+
+%=====================================================================
+\section{Consistent-Point Inheritance and Solvability}
+%=====================================================================
+
+\begin{lemma}[Consistent-point inheritance]
+\label{lem:consistent}
+Assume (H1)--(H4) hold and let $(t^*,\vx^*_{J_<},\vp^*)$ be a consistent point. For a sensitivity order $\vq$, define $\vX^* = (\vx^{*(0)},\dots,\vx^{*(\vq)})$ where $\vx^{*(\vr)} = \partial^{\vr}\vx^*/\partial\vp^{\vr}(t^*,\vp^*)$. Then $\vX^*$ is a consistent point for $C(\vq)$.
+\end{lemma}
+
+\begin{proof}
+(1) The original DAE is satisfied by hypothesis. (2) The $\vr$-order SE is satisfied because $\vF(t,\derof{}{\vx(t,\vp)},\vp)$ vanishes on a neighbourhood of $(t^*,\vp^*)$; differentiating $|\vr|$ times and evaluating at $(t^*,\vp^*)$ then yields zero. (3) Hidden constraints inherit from the preservation of $\Sigma$ and offsets: time differentiation commutes with parameter differentiation, so $(\D{\vp}{\vr}f_i)^{(c_i)} = \D{\vp}{\vr}(f_i^{(c_i)})$. Since $f_i^{(c_i)}=0$ at the consistent point, its parameter derivatives also vanish. (4) Nonsingularity: $\det(J_{C(\vq)}) = (\det J)^{N(\vq)} \neq 0$ by Theorem~\ref{thm:jacobian_shape} and (H4).
+\end{proof}
+
+\smallskip\noindent
+\textbf{Practical construction of CSS initial values.}
+Lemma~\ref{lem:consistent} guarantees existence but does not prescribe how to construct $\vX^*$ when only the original consistent point is known---the generic case in numerical practice.
+
+\textit{When sensitivity initial values are nonzero.} The original consistent initial conditions may depend on the parameters. For example, if the original initial condition $\vx(0) = \vh(\vp)$ depends explicitly on $\vp$, then the sensitivity initial values are $\partial^{|\vr|}\vh/\partial\vp^\vr$ evaluated at $\vp^*$, obtained by differentiating the known function $\vh(\vp)$.
+
+\textit{When sensitivity initial values are zero.} If the original initial condition is parameter-independent (e.g., initial positions in the simple pendulum), then all sensitivity initial values are identically zero.
+
+\textit{Consistency.} Because the sensitivity equations are obtained by differentiating the original DAE with respect to $\vp$, and the original initial conditions satisfy the algebraic constraints and their hidden derivatives, the extended initial conditions automatically satisfy the CSS constraints. No additional projection or correction step is needed.
+
+\begin{theorem}[Solvability of the CSS]
+\label{thm:css_solvable}
+Assume (H1)--(H4) hold. Then for any $\vq$, structural analysis succeeds on $C(\vq)$:
+\[
+  \det(J) \neq 0 \;\Longrightarrow\; \det(J_{C(\vq)}) = (\det J)^{N(\vq)} \neq 0.
+\]
+\end{theorem}
+
+\begin{proof}
+By the structural inheritance results of \S\ref{sec:structural}, the $\Sigma$-matrix of $C(\vq)$ is block lower-triangular with diagonal blocks equal to $\Sigma$, and its canonical offsets are $(\vc,\dots,\vc)$ and $(\vd,\dots,\vd)$ (each repeated $N(\vq)$ times). By Theorem~\ref{thm:jacobian_shape}, the system Jacobian is block lower-triangular with diagonal blocks equal to $J$, and $\det(J_{C(\vq)}) = (\det J)^{\,N(\vq)}$.
+
+Under (H4), $\det J \neq 0$ at the original consistent point, hence $\det(J_{C(\vq)}) \neq 0$ as well. A consistent point for the CSS is obtained by appending the required parameter derivatives of $\vx$ at $(t^*,\vp^*)$ to the original consistent point; these derivatives exist by Theorem~\ref{thm:existence}. The nonsingularity of $J_{C(\vq)}$ at this extended consistent point implies that structural analysis succeeds on the CSS.
+\end{proof}
+
+\smallskip\noindent
+\textbf{Scope of the guarantee.} The structural inheritance and solvability results are local---they hold in a neighbourhood of the reference point under the stated hypotheses. They rely on real analyticity of the DAE functions, which is a stronger requirement than smoothness. They assume the $\Sigma$-matrix and offsets remain constant; the results do not cover points where the structural index or HVT changes (structural bifurcation). For a real-analytic DAE, the set of parameter values where the HVT changes is a closed nowhere-dense set of measure zero~\cite{nedialkov2008solving}. Nonsingularity of the original system Jacobian is required. The results guarantee structural compatibility but do \emph{not} guarantee favourable numerical conditioning of the augmented system.
+
+\smallskip\noindent
+\textbf{What if SA fails on the original DAE?} Theorem~\ref{thm:css_solvable} is an implication: if SA succeeds on the original DAE, then it succeeds on the CSS. If SA \emph{fails} on the original---for example, due to a structurally singular $\Sigma$-matrix (no transversal of length $n$ exists) or a singular system Jacobian at the reference point---then the premise of the theorem is false and no solvability claim is made. In such cases, the augmented system will inherit the structural singularity and will not be integrable by an SA-based solver.
+
+%=====================================================================
+\section{Illustration: The Controlled Pendulum}
+%=====================================================================
+
+We illustrate the structural inheritance theorem on the controlled pendulum~\eqref{eq:pendulum} with sensitivity parameter~$u$. Differentiating with respect to $u$ yields:
+\begin{align}
+  f_{1,u} &= x_u'' + \lambda_u x + \lambda x_u + a x_u' - y - u y_u = 0,\nonumber\\
+  f_{2,u} &= y_u'' + \lambda_u y + \lambda y_u + a y_u' + x + u x_u = 0,\\
+  f_{3,u} &= 2x_u x + 2y_u y = 0.\label{eq:pendulum_se}
+\end{align}
+The SE $\Sigma$-matrix equals $\Sigma$, the offsets remain $(\vc,\vd)$, and $J' = J$. For the combined system (original + first-order SE), Theorem~\ref{thm:canonical} predicts offsets $(\vc,\vc)$ and $(\vd,\vd)$, and Theorem~\ref{thm:jacobian_shape} predicts $\bigl(\begin{smallmatrix}J&0\\ J_1&J\end{smallmatrix}\bigr)$ with $\det = (\det J)^2$.
+
+Extending to second order ($\vq=(2)$), the CSS has $n N(\vq)=9$ equations. Theorem~\ref{thm:jacobian_shape} predicts $N(\vq)=3$ diagonal blocks, each equal to $J$, so $\det(J_{\text{CSS}}) = (\det J)^3 \neq 0$.
+
+%=====================================================================
+\section{Numerical Validation}
+%=====================================================================
+
+We have confirmed these structural predictions on test systems spanning differentiation indices~0 through~5 and system sizes $n=1$ to $n=6$, using an independent Python implementation of Pryce's structural analysis (provided in the supplementary materials~\cite{supplement}). The test systems are listed in Table~\ref{tab:test_systems}. On every system, at every sensitivity order tested, the $\Sigma$-matrix, offsets, and Jacobian determinant match the theorem's predictions to the level of floating-point roundoff ($\le 10^{-14}$).
+
+\begin{table}[htbp]
+  \centering
+  \caption{Test systems used for structural validation.}
+  \label{tab:test_systems}
+  \small
+  \begin{tabular}{llcc}
+    \toprule
+    System & Description & $n$ & Index \\
+    \midrule
+    Exponential ODE & $x' = px$ & 1 & 0 \\
+    Van der Pol & coupled oscillator pair & 2 & 0 \\
+    RC circuit & index-1 electrical network & 2 & 1 \\
+    Controlled pendulum & index-3 with damping and control & 3 & 3 \\
+    Simple pendulum & canonical index-3 DAE & 3 & 3 \\
+    Double pendulum & coupled index-3 multibody system & 6 & 3 \\
+    Hessenberg SI-4 & cascade chain, index 4 & 5 & 4 \\
+    Hessenberg SI-5 & cascade chain, index 5 & 6 & 5 \\
+    Cascade (exp) & exponential forcing, SI-4 & 5 & 4 \\
+    Cascade (sin) & trigonometric forcing, SI-4 & 5 & 4 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%=====================================================================
+\section{Discussion}
+%=====================================================================
+
+\paragraph{Practical consequences.}
+Structural analysis need only succeed once on the original DAE---every sensitivity system inherits the structural solvability conditions. The block lower-triangular form of the CSS Jacobian enables efficient block-sequential solution: consistent initialisation solves the original block first, then each sensitivity block in forward order, and forward-substitution Newton steps reuse the original Jacobian factorisation $N(\vq)$ times.
+
+\paragraph{Assumptions.}
+The results are local: they hold in a neighbourhood of the reference point under the stated hypotheses. They require real analyticity (H1), which is satisfied by all elementary-function DAE models (polynomial, trigonometric, exponential, and their compositions). The companion papers~\cite{cao2026builder} that construct truncated Taylor expansions require analyticity for series convergence; the structural inheritance theorem itself requires only $C^\infty$---the implicit function theorem, chain rule, and commutativity of mixed partials all hold under this weaker hypothesis.
+
+\paragraph{Scope.}
+The results assume the $\Sigma$-matrix and offsets remain constant; at points where structural data change, the analysis must be rerun. They guarantee structural \emph{compatibility} but do not guarantee favourable numerical conditioning---the condition number of $J_{C(\vq)}$ grows with $N(\vq)$ in general.
+
+%=====================================================================
+\section{Conclusion}
+%=====================================================================
+
+We have proved that adding sensitivity equations to a parametrised DAE preserves its structural properties identically. Under the standing hypotheses, the $\Sigma$-matrix, canonical offsets, and system Jacobian of every sensitivity equation equal those of the original DAE, and the CSS Jacobian is block lower-triangular with determinant $(\det J)^{N(\vq)}$. The theorem holds for any finite differentiation index and any requested finite sensitivity order, removing the index and order restrictions that limit existing DAE sensitivity methods.
+
+\subsection*{Acknowledgments}
+The author thanks Ned S.\ Nedialkov for guidance and NSERC for financial support.
+
+\subsection*{Data Availability}
+The Python implementation of Pryce's structural analysis and the verification scripts reproducing all results are available at \texttt{https://github.com/caobo1994/ecss-verify}. The companion paper~\cite{cao2026builder} describes the C++ ECSS builder implementation.
+
+%=====================================================================
+\bibliographystyle{siam}
+\begin{thebibliography}{99}
+
+\bibitem{arnold1995numerical}
+M.\ Arnold and B.\ Simeon.
+Numerical simulation of multibody systems in vehicle dynamics.
+\textit{Veh. Syst. Dyn.}, 24(2):101--115, 1995.
+
+\bibitem{barrio2006sensitivity}
+R.\ Barrio.
+Sensitivity analysis of ODEs/DAEs using the Taylor series method.
+\textit{SIAM J. Sci. Comput.}, 27(6):1929--1947, 2006.
+
+\bibitem{campbell2016solving}
+S.\ L.\ Campbell and P.\ Kunkel.
+Solving higher index DAE optimal control problems.
+\textit{Numer. Algebra Control Optim.}, 6(4):447--472, 2016.
+
+\bibitem{cao2002adjoint}
+Y.\ Cao, S.\ Li, L.\ Petzold, and R.\ Serban.
+Adjoint sensitivity analysis for differential-algebraic equations: algorithms and software.
+\textit{J. Comput. Appl. Math.}, 149:171--192, 2002.
+
+\bibitem{cao2003adjoint}
+Y.\ Cao, S.\ Li, and L.\ Petzold.
+Adjoint sensitivity analysis for differential-algebraic equations: the adjoint DAE system and its numerical solution.
+\textit{SIAM J. Sci. Comput.}, 24(3):1076--1089, 2003.
+
+\bibitem{cao2026builder}
+B.\ Cao.
+Automatic generation of sensitivity systems for differential-algebraic equations via multivariate Taylor series.
+Submitted, 2026.
+
+\bibitem{coddington1955theory}
+E.\ A.\ Coddington and N.\ Levinson.
+\textit{Theory of Ordinary Differential Equations}.
+McGraw-Hill, 1955.
+
+\bibitem{elsheikh2018structural}
+A.\ Elsheikh and W.\ Wiechert.
+The structural index of sensitivity equation systems.
+\textit{Math. Comput. Model. Dyn. Syst.}, 24:573--592, 2018.
+
+\bibitem{gardner2022sundials}
+D.\ J.\ Gardner, D.\ R.\ Reynolds, C.\ S.\ Woodward, and C.\ J.\ Balos.
+Enabling new flexibility in the SUNDIALS suite.
+\textit{ACM Trans. Math. Softw.}, 48(3), Art.\ 31, 2022.
+
+\bibitem{golub2013matrix}
+G.\ H.\ Golub and C.\ F.\ Van Loan.
+\textit{Matrix Computations}, 4th ed.
+Johns Hopkins, 2013.
+
+\bibitem{gunther2000differential}
+M.\ G\"{u}nther, M.\ Hoschek, and P.\ Rentrop.
+Differential-algebraic equations in electric circuit simulation.
+\textit{AEU}, 54(2):101--107, 2000.
+
+\bibitem{hairer1993solving}
+E.\ Hairer, S.\ P.\ N{\o}rsett, and G.\ Wanner.
+\textit{Solving Ordinary Differential Equations I: Nonstiff Problems}, 2nd ed.
+Springer, 1993.
+
+\bibitem{krantz2002implicit}
+S.\ G.\ Krantz and H.\ R.\ Parks.
+\textit{The Implicit Function Theorem: History, Theory, and Applications}.
+Birkh\"{a}user, 2002.
+
+\bibitem{li2000sensitivity}
+S.\ Li and L.\ Petzold.
+Software and algorithms for sensitivity analysis of large-scale differential-algebraic systems.
+\textit{J. Comput. Appl. Math.}, 125:131--145, 2000.
+
+\bibitem{nedialkov2008solving}
+N.\ S.\ Nedialkov and J.\ D.\ Pryce.
+Solving differential-algebraic equations by Taylor series (III): the DAETS code.
+\textit{J. Numer. Anal. Ind. Appl. Math.}, 3(1--2):61--80, 2008.
+
+\bibitem{pantelides1988consistent}
+C.\ C.\ Pantelides.
+The consistent initialization of differential-algebraic systems.
+\textit{SIAM J. Sci. Stat. Comput.}, 9(2):213--231, 1988.
+
+\bibitem{pryce2001simple}
+J.\ D.\ Pryce.
+A simple structural analysis method for DAEs.
+\textit{BIT Numer. Math.}, 41:364--394, 2001.
+
+\bibitem{rabitz1999efficient}
+H.\ Rabitz, \"{O}.\ F.\ Ali\c{s}, J.\ Shorter, and K.\ Shim.
+Efficient input-output model representations.
+\textit{Comput. Phys. Commun.}, 117(1--2):11--20, 1999.
+
+\bibitem{rauh2017sensitivity}
+A.\ Rauh.
+\textit{Sensitivity Methods for Analysis and Design of Dynamic Systems}.
+Shaker Verlag, 2017.
+
+\bibitem{supplement}
+B.\ Cao.
+Supplementary materials: ECSS verification suite.\\
+\texttt{https://github.com/caobo1994/ecss-verify}, 2026.
+
+\end{thebibliography}
+
+\end{document}

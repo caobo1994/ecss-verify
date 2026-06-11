@@ -1,0 +1,493 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{array}
+\usepackage{mathtools}
+\usepackage{hyperref}
+\usepackage[capitalize,noabbrev]{cleveref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,language=C++}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{remark}
+\newtheorem{example}{Example}[section]
+
+% Notation
+\newcommand{\vx}{\mathbf{x}}
+\newcommand{\vp}{\mathbf{p}}
+\newcommand{\vq}{\mathbf{q}}
+\newcommand{\vQ}{\mathbf{Q}}
+\newcommand{\vr}{\mathbf{r}}
+\newcommand{\vs}{\mathbf{s}}
+\newcommand{\vc}{\mathbf{c}}
+\newcommand{\vd}{\mathbf{d}}
+\newcommand{\vF}{\mathbf{F}}
+\newcommand{\vh}{\mathbf{h}}
+\newcommand{\Jb}{\mathbf{J}}
+\newcommand{\vz}{\mathbf{0}}
+\newcommand{\D}[2]{\frac{\partial^{\,#2}}{\partial #1^{\,#2}}}
+\newcommand{\cpp}{C\nolinebreak[4]\hspace{-.05em}\raisebox{.35ex}{\small\textbf{+\!+}}}
+
+\newcommand{\keywords}[1]{\noindent\textbf{Keywords:} #1}
+\newcommand{\MSC}[1]{\noindent\textbf{MSC Classification:} #1}
+
+\title{\bfseries Automatic Generation of Sensitivity Systems for Differential-Algebraic Equations via Multivariate Taylor Series\thanks{Submitted for publication.}}
+
+\author{Bo Cao\thanks{School of Computational Science and Engineering, McMaster University, Hamilton, ON, Canada. Email: caobo19940411@gmail.com}}
+
+\date{2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\emergencystretch=1em
+We present a method for automatically generating sensitivity equations for parametrised differential-algebraic equations (DAEs) using multivariate Taylor series (MVTS) arithmetic with operator-overloading automatic differentiation. Given a DAE and a user-specified set of sensitivity orders (the sensitivity order vector, SOV), the method evaluates the original DAE once with MVTS-valued variables, extracts the coefficients, and assembles a self-contained extended complete sensitivity system (ECSS)---an augmented DAE whose solution contains all requested sensitivities. The approach has three novel features: (i)~the SOV framework with dependency closure enables selective computation of only the sensitivity orders the user needs, avoiding the combinatorial expansion of a full-order system; (ii)~operator-overloading MVTS arithmetic propagates all sensitivity orders simultaneously in a single evaluation pass, producing a structured DAE whose solvability is guaranteed by the structural inheritance theorem; and (iii)~the generated ECSS is solver-independent---it is a plain DAE in standard form exportable to any integrator accepting that interface. We demonstrate the method on the simple pendulum, showing how the coefficient arithmetic rules automatically produce the sensitivity equations, and report computational performance confirming linear cost scaling with the reliance number---a combinatorial metric derived from the SOV. Cross-solver validation with SciPy's Radau, RK45, and BDF integrators confirms that the generated equations are solver-independent, with agreement to $1.7\times10^{-14}$.
+\end{abstract}
+
+\keywords{differential-algebraic equation, sensitivity analysis, multivariate Taylor series, automatic differentiation, operator overloading, extended complete sensitivity system}
+\MSC{65L80, 65L05, 65D25, 68N19}
+
+%=====================================================================
+\section{Introduction}
+
+Computing how the solution of a differential-algebraic equation (DAE) changes when its parameters vary---\emph{sensitivity analysis}---is essential for optimisation, uncertainty quantification, parameter estimation, and model calibration~\cite{rabitz1999efficient,isukapalli1998stochastic}. While sensitivity methods for ordinary differential equations (ODEs) are well established~\cite{dickinson1976sensitivity,sandu1997sensitivity}, extending them to DAEs introduces fundamental challenges. DAEs contain algebraic constraints that couple the state variables; high-index DAEs contain \emph{hidden} constraints exposed only through repeated differentiation.
+
+Existing DAE sensitivity methods are limited in three ways: they handle at most index~1 (or specially structured index~2) systems~\cite{li2000sensitivity,cao2002adjoint,cao2003adjoint}, they compute at most second-order sensitivities~\cite{barrio2006sensitivity}, and they embed sensitivity logic inside specific solvers~\cite{gardner2022sundials}, preventing reuse. Barrio's multivariate Taylor series (MVTS) method~\cite{barrio2006sensitivity} can compute arbitrary-order sensitivities for explicit ODEs but does not handle DAEs.
+
+The companion paper~\cite{cao2026structural} proves the \emph{structural inheritance theorem}: adding sensitivity equations to a DAE preserves its $\Sigma$-matrix, canonical offsets, and system Jacobian identically. This guarantees that whenever Pryce's structural analysis~\cite{pryce2001simple} succeeds on the original DAE, it succeeds on the complete sensitivity system for any finite index and any requested finite order.
+
+This paper addresses the complementary question: \emph{given that sensitivity systems are structurally solvable, how do we construct them automatically?} We present the \emph{ECSS builder}---a C++ framework that uses operator-overloading automatic differentiation (AD) with MVTS-valued variables to generate the sensitivity equations from the original DAE code without manual derivation.
+
+Operator-overloading AD evaluates derivatives by replacing scalar types with a custom type that propagates derivative information through overloaded arithmetic operators~\cite{griewank2008evaluating}. Libraries such as FADBAD++~\cite{bendtsen1996fadbad}, CoDiPack~\cite{sagebaum2019codipack}, and Sacado~\cite{phipps2012sacado} use this technique for forward-mode differentiation. Our contribution is a specialised MVTS type whose coefficient arithmetic implements the multi-index chain rule for DAE sensitivity generation, integrated with Pryce's structural analysis via the structural inheritance theorem.
+
+\medskip\noindent\textbf{Contributions.}
+\begin{enumerate}[nosep]
+  \item We formalise the MVTS arithmetic rules for multi-index coefficient propagation, extending Barrio's univariate rules~\cite{barrio2006sensitivity} to the multi-parameter, SOV-restricted case (Section~\ref{sec:mvts}).
+  \item We introduce the SOV framework with dependency closure, enabling selective computation of arbitrary sensitivity orders while guaranteeing a closed sensitivity system (Section~\ref{sec:sov}).
+  \item We describe the three-step ECSS generator---substitution, evaluation, extraction---and its \cpp{} implementation (Section~\ref{sec:generation}).
+  \item We demonstrate solver independence: the generated ECSS is a self-contained DAE exportable to any integrator, validated with three SciPy solvers on the simple pendulum (Section~\ref{sec:solver}).
+  \item We analyse computational complexity via the reliance number (RN) and confirm approximately linear cost scaling experimentally (Section~\ref{sec:performance}).
+\end{enumerate}
+
+\section{Background}
+\label{sec:background}
+
+\subsection{Parametrised DAEs and Sensitivity}
+
+We consider a system of $n$ equations in $n$ dependent variables $x_j(t)$ depending on $m$ parameters $\vp = (p_1,\dots,p_m)$:
+\begin{equation}\label{eq:pDAE}
+  f_i\bigl(t, \text{the time derivatives of } x_1,\dots,x_n,\; \vp\bigr) = 0,\qquad i = 1:n.
+\end{equation}
+A \emph{sensitivity order} is a multi-index $\vq = (q_1,\dots,q_m)\in\mathbb{N}_0^m$. The sensitivity of variable $x$ of order $\vq$ is $\partial^{\vq}x/\partial\vp^{\vq}$ where $\partial^{\vq}/\partial\vp^{\vq} = \partial^{q_1}/\partial p_1^{q_1}\cdots\partial^{q_m}/\partial p_m^{q_m}$.
+
+\begin{definition}[CSS and ECSS]
+For a sensitivity order $\vq$, the \emph{Complete Sensitivity System} (CSS) $C(\vq)$ comprises all sensitivity equations of orders $\vr \le \vq$ (component-wise: $r_i \le q_i$ for all $i$). The CSS size is $N(\vq) = \prod_{i=1}^m(q_i+1)$, giving $n N(\vq)$ equations.
+
+The \emph{Extended Complete Sensitivity System} (ECSS) generalises the CSS: given a set $\vQ$ of desired sensitivity orders (the SOV), the ECSS is the union of CSS instances for each order in $\vQ$, with duplicate orders removed.
+\end{definition}
+
+The companion paper~\cite{cao2026structural} proves that the ECSS inherits the $\Sigma$-matrix, canonical offsets, and system Jacobian of the original DAE, with a block lower-triangular Jacobian of determinant $(\det J)^{N(\vq)}$. This guarantees structural solvability.
+
+\subsection{Pryce's Structural Analysis (Brief)}
+
+Pryce's $\Sigma$-method~\cite{pryce2001simple} extracts structural properties from the pattern of derivatives: the $n\times n$ $\Sigma$-matrix entries $\sigma_{ij}$ are the highest-order time derivatives of $x_j$ appearing in $f_i$; the canonical offsets $(\vc,\vd)$ satisfy $d_j-c_i\ge\sigma_{ij}$ with equality on a highest-value transversal (HVT); and the system Jacobian $\Jb$ has entries $J_{ij}=\partial f_i/\partial x_j^{(\sigma_{ij})}$ when $\sigma_{ij}=d_j-c_i$ and 0 otherwise. These objects determine whether a DAE is structurally well-posed~\cite{brenan1995numerical}.
+
+\section{Multivariate Taylor Series Arithmetic}
+\label{sec:mvts}
+
+An MVTS encodes a function's Taylor expansion with respect to the parameters up to specified orders. Our formulation adapts Barrio's~\cite{barrio2006sensitivity} with three modifications: we omit the time expansion (handled by the solver), incorporate a scaling vector $\vh$ for numerical stability~\cite{goldberg1991every,higham2002accuracy}, and restrict terms to a user-specified SOV $\vQ$.
+
+\begin{definition}[MVTS]
+For variables $\vx$ and SOV $\vQ$, the MVTS of $\vx$ with respect to parameters $\vp$ is
+\begin{equation}\label{eq:mvts}
+  \sum_{\vq\in\vQ} \frac{\vh^\vq}{\vq!}\,
+  \frac{\partial^{\vq}\vx}{\partial\vp^{\vq}}\,
+  \Bigl(\frac{\vp}{\vh}\Bigr)^{\!\vq},
+\end{equation}
+where $\vh^\vq = \prod_i h_i^{q_i}$ and $\vq! = \prod_i q_i!$. The \emph{coefficient} of order $\vq$ is $x_{\vq} := (\vh^\vq/\vq!)\,\partial^{\vq}\vx/\partial\vp^{\vq}$, i.e., the scaled sensitivity derivative.
+\end{definition}
+
+The scaling factors serve as numerical preconditioners: each coefficient is normalised by $\vh^{\vq}/\vq!$, reducing overflow/underflow risk. In practice, set $h_i \approx |\Delta p_i|$; when parameters are $O(1)$, use $h_i=1$.
+
+\subsection{Coefficient Propagation Rules}
+
+Let $f$ and $g$ be MVTS with coefficients $f_\vq$, $g_\vq$. The following rules compute coefficients $h_\vq$ of $h = f \circ g$. They extend Barrio's univariate recurrences~\cite{barrio2006sensitivity} to the multi-parameter case; each parameter direction is treated independently under commutativity of mixed partials.
+
+The order-reduction operator $\vq^*$ and $B$-coefficient are:
+\begin{equation*}
+  q_i^* = \begin{cases}
+    q_i-1, & q_i>0,\; q_{i+1}=\dots=q_m=0,\\
+    q_i,   & \text{otherwise},
+  \end{cases}
+  \qquad
+  B(\vq,\vr) = \frac{q_i-r_i}{q_i},
+\end{equation*}
+where $i$ is the largest index with $q_i>0$ (or $i=0$ if $\vq=\vz$). By commutativity of mixed partials, any non-zero parameter direction gives the same result; choosing the rightmost non-zero component is a convention that aligns with the forward-mode differentiation order in the implementation.
+
+\begin{theorem}[MVTS coefficient formulas]\label{thm:coefficients}
+For MVTS $f,g$ with coefficients $f_\vq,g_\vq$:
+\begin{enumerate}[nosep]
+  \item \textbf{Addition:} $h_\vq = f_\vq \pm g_\vq$.
+  \item \textbf{Multiplication:} $h_\vq = \sum_{\vr\le\vq} f_\vr\,g_{\vq-\vr}$.
+  \item \textbf{Division} ($h=f/g$): $h_\vq = \frac{1}{g_{\vz}}\bigl(f_\vq - \sum_{\vr<\vq} h_\vr\,g_{\vq-\vr}\bigr)$.
+  \item \textbf{Power} ($h=f^a$): $h_{\vz}=f_{\vz}^a$; for $\vq\neq\vz$, $h_\vq = \frac{1}{f_{\vz}}\bigl[a h_{\vz}f_\vq + \sum_{0<\vr\le\vq^*} B(\vq,\vr)(a h_\vr f_{\vq-\vr} - h_{\vq-\vr}f_\vr)\bigr]$.
+  \item \textbf{Exponential} ($h=\exp(f)$): $h_{\vz}=\exp(f_{\vz})$; $h_\vq = \sum_{\vr\le\vq^*} B(\vq,\vr)\,h_\vr\,f_{\vq-\vr}$.
+  \item \textbf{Sine/Cosine} ($h=\sin(f),g=\cos(f)$):\begin{math} h_{\vz}=\sin(f_{\vz}),\; g_{\vz}=\cos(f_{\vz});\end{math}\\[2pt]
+        $h_\vq = \sum_{\vr\le\vq^*} B(\vq,\vr)\,g_\vr\,f_{\vq-\vr}$,\; $g_\vq = -\sum_{\vr\le\vq^*} B(\vq,\vr)\,h_\vr\,f_{\vq-\vr}$.
+\end{enumerate}
+(Caveat: all denominators are assumed non-zero in a neighbourhood of a non-degenerate consistent point.)
+\end{theorem}
+
+The underlying calculus is standard; the contribution is organising these rules into a multi-index, SOV-aware recurrence compatible with Pryce's structural analysis through the structural inheritance theorem.
+
+\subsection{Numerical Stability}
+
+In the MVTS coefficient recurrences, addition and multiplication involve only sums of products of coefficients with no subtractive cancellation, so they are stable. Division and elementary-function rules involve subtraction, and catastrophic cancellation can occur when terms are large and nearly equal---this drives the growth of normalised residual error (relative to the analytic sensitivity values) from ${\sim}10^{-11}$ at order~0 (the original DAE, where error is dominated by integration tolerance) to ${\sim}10^{-5}$ at order~5, as measured on the simple pendulum with DAETS~\cite{nedialkov2008solving} tolerance $10^{-12}$ (see Section~\ref{sec:performance}). The error growth with order is intrinsic to the MVTS recurrences: for multiplication $h_{\vq} = \sum_{\vr\le\vq} f_\vr g_{\vq-\vr}$, the number of terms in the sum grows with $|\vq|$, and alternating-sign contributions in the division and elementary-function rules amplify cancellation. The block lower-triangular ECSS Jacobian~\cite{cao2026structural} isolates error propagation within each sensitivity order; diagonal blocks (which determine solvability) are unaffected.
+
+\section{The SOV Framework}
+\label{sec:sov}
+
+A full-order CSS $C(\vq)$ computes \emph{every} order $\vr\le\vq$, growing as $\prod_i(q_i+1)$. This is wasteful when only a few parameter directions require high-order sensitivities. The SOV framework lets users specify exactly which orders to compute.
+
+\begin{definition}[SOV and ECSS]
+A \emph{sensitivity order vector} (SOV) $\vQ_{\text{req}} = (\vq_i)_{i=1}^{n_{\text{req}}}$ is a sequence of desired sensitivity orders specifying which parameter derivatives the user needs. The SOV satisfies the \emph{antichain property}: no element is component-wise~$\ge$ any other, guaranteeing no order is redundant.
+
+The \emph{dependency closure} $\overline{\vQ}_{\text{req}}$ is the smallest downward-closed set containing $\vQ_{\text{req}}$: for every $\vr \le \vq_i \in \vQ_{\text{req}}$, we have $\vr \in \overline{\vQ}_{\text{req}}$. Every closed SOV begins with $\vz$ (the original DAE). The closure is computed by a topological-sort algorithm that inserts missing ancestors.
+
+The \emph{ECSS} for SOV $\vQ_{\text{req}}$ is defined over the closed SOV $\overline{\vQ}_{\text{req}} = (\vq_i)_{i=1}^{n_q}$ with $n_q$ orders; it consists of $n\times n_q$ equations and variables:
+\[
+  \text{Equations: } \D{\vp}{\vq_i}\vF,\quad
+  \text{Variables: } \frac{\partial^{\vq_i}\vx}{\partial\vp^{\vq_i}},\qquad i=1,\dots,n_q.
+\]
+\end{definition}
+
+\begin{example}
+For $m=2$, requesting only pure second derivatives $\vQ = \{(2,0),(0,2)\}$ yields an ECSS with 5 orders $\{(0,0),(1,0),(2,0),(0,1),(0,2)\}$, requiring $5n$ equations. The smallest single-order CSS that includes both is $C(2,2)$ with $9n$ equations---the SOV saves $4n$ equations by omitting four mixed-derivative orders.
+\end{example}
+
+The implementation distinguishes between the \emph{requested SOV} (user-specified) and the \emph{closed SOV} (with dependency closure applied). The builder computes the closed SOV, generates equations for all orders in it, and the reporting layer may discard sensitivities not requested.
+
+\section{ECSS Generation in Three Steps}
+\label{sec:generation}
+
+\subsection{Step 1: MVTS Substitution}
+
+Replace every variable $x_j$ in the pDAE with its MVTS representation. Time $t$ is an MVTS with only zeroth-order coefficient non-zero: $t_{\text{MVTS}} = t$. Each sensitivity parameter $p_k$ has $\partial p_k/\partial p_k = 1$ at order $\mathbf{e}_k$: $p_{k,\text{MVTS}} = p_k + 1\cdot\Delta p_k$. Non-sensitivity parameters have all higher-order coefficients zero.
+
+\subsection{Step 2: MVTS Evaluation}
+
+The substituted system is evaluated using MVTS arithmetic (Theorem~\ref{thm:coefficients}). For each equation $f_i$, coefficients $f_{i,\vq}$ are computed order-by-order from $\vz$ upward. The zeroth-order coefficient $f_{i,\vz}=0$ reproduces the original DAE; higher-order coefficients $f_{i,\vq}$ ($\vq\neq\vz$) are, up to scaling, the sensitivity equations.
+
+\subsection{Step 3: Coefficient Extraction}
+
+The MVTS coefficients are unscaled: for each $\vq\in\vQ$, the sensitivity equation is $\frac{\vq!}{\vh^\vq}\,f_{i,\vq}=0$, with variable $x_{j,\vq} = \partial^{\vq}x_j/\partial\vp^{\vq}$.
+
+\subsection{Worked Example: Simple Pendulum}
+
+We trace the generation for the simple pendulum with sensitivity parameter~$g$ and SOV $\vQ_{\text{req}}=\{(0),(1)\}$ (scaling factors set to unity). The rod length $L$ is treated as a fixed constant (not a sensitivity parameter) throughout this example:
+\begin{equation}\label{eq:pendulum}
+  \begin{aligned}
+    x'' + \lambda x &= 0,\\
+    y'' + \lambda y - g &= 0,\\
+    x^2 + y^2 - L^2 &= 0.
+  \end{aligned}
+\end{equation}
+
+\textbf{Step 1 (Substitution).} Replace variables by their MVTS representations:
+\[
+  x_{\text{MVTS}} = x + x_g\Delta g,\quad
+  y_{\text{MVTS}} = y + y_g\Delta g,\quad
+  \lambda_{\text{MVTS}} = \lambda + \lambda_g\Delta g,\quad
+  g_{\text{MVTS}} = g + 1\cdot\Delta g.
+\]
+
+\textbf{Step 2 (Evaluation).} Substitute into $f_1 = x'' + \lambda x$:
+\begin{align*}
+  f_1(x_{\text{MVTS}},\lambda_{\text{MVTS}})
+  &= (x'' + x_g''\Delta g) + (\lambda + \lambda_g\Delta g)(x + x_g\Delta g)\\
+  &= (x'' + \lambda x) + (x_g'' + \lambda_g x + \lambda x_g)\Delta g + (\lambda_g x_g)(\Delta g)^2.
+\end{align*}
+The $(\Delta g)^2$ term is discarded ($(2)\notin\overline{\vQ}_{\text{req}}$). Similarly, $f_2$ and $f_3$ expand to:
+\begin{align*}
+  f_2 &= (y''+\lambda y - g) + (y_g'' + \lambda_g y + \lambda y_g - 1)\Delta g,\\
+  f_3 &= (x^2+y^2-L^2) + (2x_g x + 2y_g y)\Delta g.
+\end{align*}
+
+\textbf{Step 3 (Extraction).} Collecting coefficients yields the ECSS:
+\begin{align*}
+  \text{Order (0):}\quad & x'' + \lambda x = 0,\; y'' + \lambda y - g = 0,\; x^2+y^2-L^2 = 0,\\
+  \text{Order (1):}\quad & x_g'' + \lambda_g x + \lambda x_g = 0,\; y_g'' + \lambda_g y + \lambda y_g - 1 = 0,\; 2x_g x + 2y_g y = 0.
+\end{align*}
+The ECSS builder produces these equations automatically by instantiating the pendulum function template with \texttt{MVTS<double>}---no manual derivation required. The generated ECSS matches the manually derived system to machine precision; this equivalence has been confirmed on all test systems in the supplementary materials~\cite{cao2026supplement}.
+
+\section{Implementation}
+\label{sec:implementation}
+
+The ECSS builder is implemented in C++ using operator-overloaded AD. The architecture separates \emph{generation} from \emph{integration}: the builder produces a self-contained DAE in standard form (function pointer \texttt{void (*fcn)(double, const double*, double*, void*)} with an optional Jacobian callback)---the interface expected by SUNDIALS IDA, DASSL, DAETS, MATLAB's \texttt{ode15s}, and SciPy's \texttt{solve\_ivp}.
+
+\subsection{Core Components}
+
+\begin{description}[nosep]
+  \item[\texttt{DataPack}] Stores problem dimensions, parameter values, maximum sensitivity order, and scaling factors. Defines the ECSS configuration.
+  \item[\texttt{MVTS\_Order}] Manages the SOV: enumerates orders, computes dependency closure, precomputes $B(\vq,\vr)$, and stores the reliance number (RN).
+  \item[\texttt{MVTS<T>}] The MVTS arithmetic engine. Overloads \texttt{+}, \texttt{-}, \texttt{*}, \texttt{/}, and elementary functions (\texttt{sin}, \texttt{cos}, \texttt{exp}, \texttt{log}, \texttt{pow}) via the coefficient rules of Theorem~\ref{thm:coefficients}. The template parameter \texttt{T} is typically \texttt{double}.
+\end{description}
+
+\subsection{Algorithmic Outline}
+
+\begin{enumerate}[nosep]
+  \item Accept the original pDAE evaluator $F$, parameter value $\vp^*$, and requested SOV $\vQ_{\text{req}}$.
+  \item Compute the dependency closure $\overline{\vQ}_{\text{req}}$.
+  \item Replace state variables and parameters with \texttt{MVTS<T>} objects over $\overline{\vQ}_{\text{req}}$.
+  \item Evaluate $F$ \emph{once} using MVTS arithmetic---the overloaded operators automatically propagate all sensitivity orders.
+  \item Extract coefficients for each order in $\overline{\vQ}_{\text{req}}$ to form the ECSS equations.
+  \item Output the self-contained ECSS as a standard-form DAE plus consistent initial values.
+\end{enumerate}
+
+The user provides a templated pDAE function:
+\begin{lstlisting}
+template <class T>
+void fcn_original(T t, const T* x, T* f,
+                  const T* param, void* user_data);
+\end{lstlisting}
+For the simple pendulum:
+\begin{lstlisting}
+template <class T>
+void fcn_original(T t, const T* x, T* f,
+                  const T* param, void*) {
+    f[0] = Diff(x[0], 2) + x[0] * x[2];
+    f[1] = Diff(x[1], 2) + x[1] * x[2] - param[0];
+    f[2] = x[0] * x[0] + x[1] * x[1] - param[1];
+}
+\end{lstlisting}
+Instantiating with \texttt{T = MVTS<double>} triggers the overloaded arithmetic.
+
+\subsection{Relationship to Barrio (2006)}
+
+Table~\ref{tab:barrio} summarises what is inherited from Barrio~\cite{barrio2006sensitivity} and what is novel in this work.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Relationship to Barrio~\cite{barrio2006sensitivity}.}
+  \label{tab:barrio}
+  \small
+  \begin{tabular}{>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{4.0cm}>{\raggedright\arraybackslash}p{4.2cm}}
+    \toprule
+    Aspect & Barrio (2006) & This work \\
+    \midrule
+    Coefficient rules & Univariate recurrence for ODEs & Multi-index generalisation for DAEs with component-wise partial order on $\mathbb{N}_0^m$ \\
+    $B$-coefficient & $B(q,r)=\frac{q-r}{q}$ (univariate) & $B(\vq,\vr)=\frac{q_i-r_i}{q_i}$ (multi-index, valid under commutativity of mixed partials) \\
+    Order set & All orders up to total $s$ & User-specified SOV $\vQ$ with dependency closure \\
+    Scaling & Raw Taylor coefficients & Scaled coefficients $(\vh^{\vq}/\vq!)\,\partial^{\vq}/\partial\vp^{\vq}$ for numerical stability \\
+    Target & Explicit ODEs & Structurally analysed DAEs of any index \\
+    Structural guarantee & None & Structural inheritance theorem guarantees solvability \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\noindent As noted in Section~\ref{sec:mvts}, the calculus underlying these rules is standard; the novelty lies in the SOV-restricted, multi-index organisation and the structural guarantee provided by the inheritance theorem.
+
+\section{Solver Independence}
+\label{sec:solver}
+
+The generated ECSS is a self-contained DAE in standard form. We demonstrate solver independence with two problems: an exponential ODE (index~0) integrated with explicit Euler, and the simple pendulum (index-reduced to an ODE via Pryce SA) integrated with three SciPy solvers---Radau (implicit, order~5), RK45 (explicit, order~5), and BDF (implicit, variable-order)---comparing against the DAETS reference.
+
+\subsection{Exponential ODE with Explicit Euler}
+
+The ODE $x'(t) = x(t)\,p$ with $p=1$, $x(0)=1$ has analytic solution $x(t) = e^{pt}$ with sensitivities $\partial^q x/\partial p^q = t^q e^{pt}$. The ECSS for orders $0$ through $3$ ($n_q=4$, $n=1$) is integrated with explicit Euler ($h=10^{-4}$) to $t=10$. The computed sensitivities match the analytic values to $O(h)$, consistent with the first-order method, confirming as a baseline that the generated ECSS integrates correctly with the simplest possible solver. The real tests of solver independence are the cross-solver comparisons on the pendulum in Section~\ref{sec:solver}.
+
+\subsection{Cross-Solver Validation on the Simple Pendulum}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Cross-solver validation: SciPy integrators vs.\ DAETS ECSS reference on the simple pendulum ECSS.}
+  \label{tab:cross_solver}
+  \begin{tabular}{lcccc}
+    \toprule
+    Solver & Steps & F-evals & Max.\ error & Result \\
+    \midrule
+    SciPy Radau & 936 & 7456 & $1.73\times10^{-14}$ & PASS \\
+    SciPy RK45  & 211 & 1225 & $2.76\times10^{-11}$ & PASS \\
+    SciPy BDF   & 480 & 1211 & $6.25\times10^{-10}$ & PASS \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+All three solvers agree with DAETS to better than $10^{-9}$, confirming that the ECSS is solver-independent at the equation-generation level. Radau achieves near-machine-precision agreement ($1.73\times10^{-14}$). The supplementary materials~\cite{cao2026supplement} provide the Python scripts and JSON output files reproducing all results.
+
+\section{Computational Performance}
+\label{sec:performance}
+
+The computational cost of the ECSS is quantified by the \emph{reliance number} (RN). For the closed SOV $\overline{\vQ}$, the RN counts the cumulative number of terms appearing in the coefficient recurrence (Theorem~\ref{thm:coefficients}) across all operations in the computational graph of the DAE evaluator. For a single multiplication with $n_q$ orders, the recurrence $h_{\vq} = \sum_{\vr\le\vq} f_\vr g_{\vq-\vr}$ performs $O(n_q^2)$ arithmetic operations. Summing over all multiplications, divisions, and elementary-function evaluations in the DAE right-hand side yields
+\[
+  \mathrm{RN}(\overline{\vQ}) = \sum_{\text{ops in CG}} |\{\vr \le \vq : \vq,\vr\in\overline{\vQ}\}|,
+\]
+where CG denotes the computational graph whose total edge count (including linear dependency edges) appears in the CG column of Table~\ref{tab:performance}. At order~0 ($n_q=1$), each non-linear operation in the computational graph requires a single coefficient product $(h_{\vz}=f_{\vz}g_{\vz})$, so RN equals the number of non-linear operations. For the simple pendulum this yields RN$\,{=}\,1$ (the two squares $x^2$ and $y^2$ together count as one combined non-linear block in the computational graph); total CG = 28 reflects all linear and non-linear dependencies.
+
+For a full-order SOV with $m$ parameters at total order $s$, the RN grows as $\Theta(s^{2m})$ in the worst case (dense multiplication over all $n_q = (s+1)^m$ orders). For the single-parameter case ($m=1$) tested in Table~\ref{tab:performance}, each binary operation with $q+1$ orders requires $\sum_{q=0}^{s}(q+1) = (s+1)(s+2)/2$ coefficient products, giving $\mathrm{RN} = N_{\text{ops}}\cdot(s+1)(s+2)/2$ where $N_{\text{ops}}$ is the number of non-linear operations in the computational graph. Selective SOVs dramatically reduce the RN by omitting unneeded mixed partials.
+
+The number of arithmetic operations per function evaluation scales approximately linearly with the RN. The DAETS solver adds linear-algebra cost through system Jacobian factorisation. The theoretical complexity lies between two limits:
+\begin{itemize}[nosep]
+  \item \textbf{Sparse limit} (block tridiagonal $\Sigma$, typical of multibody DAEs, as tested here): $T \propto \mathrm{RN} + O(nN)$, where $nN$ is the augmented system size.
+  \item \textbf{Dense limit} (fully populated $\Sigma$, not tested): $T \propto \mathrm{RN} + O((nN)^3)$, as a theoretical upper bound.
+\end{itemize}
+
+\begin{table}[htbp]
+  \centering
+  \caption{RN, computational graph edge count, and integration time vs.\ maximum total sensitivity order for the simple pendulum ($n=3$, $m=1$, DAETS, Apple M2 Pro).}
+  \label{tab:performance}
+  \begin{tabular}{cccc}
+    \toprule
+    Max.\ order & RN & CG edge count & Solve time (s) \\
+    \midrule
+    0  & 1    & 28    & 0.014 \\
+    1  & 5    & 116   & 0.018 \\
+    2  & 15   & 312   & 0.034 \\
+    3  & 35   & 680   & 0.061 \\
+    4  & 70   & 1300  & 0.116 \\
+    5  & 126  & 2268  & 0.192 \\
+    6  & 210  & 3696  & 0.351 \\
+    7  & 330  & 5712  & 0.563 \\
+    8  & 495  & 8460  & 0.824 \\
+    9  & 715  & 12100 & 1.196 \\
+    10 & 1001 & 16808 & 1.763 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Table~\ref{tab:performance} confirms approximately linear scaling of both edge count ($r>0.999$) and solve time ($r>0.99$) with RN in the tested regime. For small systems ($n\le 12$), the ECSS memory overhead is negligible relative to the DAETS solver baseline (${\sim}77$\,MiB). The function evaluation fraction grows from ${\sim}19\%$ at order~0 to ${\sim}53\%$ at order~2, consistent with RN-driven growth of MVTS arithmetic operations.
+
+\section{Discussion}
+
+The ECSS builder's template-based design has several practical implications. First, the DAE specification is written once and reused for both the original problem and all sensitivity orders---the compiler handles the type instantiation. Second, the generated ECSS is a standard-form DAE with no dependency on the builder at runtime, so it can be shipped as a function pointer and integrated into any solver framework. Third, the SOV enables users to trade computational cost for information: requesting only the sensitivities actually needed.
+
+The approach inherits the limitations of the structural inheritance theorem~\cite{cao2026structural}: results are local. While the structural inheritance theorem itself holds under $C^\infty$ smoothness, the MVTS arithmetic requires the stronger condition of real analyticity to guarantee convergence of the truncated Taylor series with respect to parameters. For problems where the $\Sigma$-matrix changes along the solution trajectory (structural bifurcation), the ECSS must be regenerated. The MVTS arithmetic involves subtractions in the division and elementary-function rules, so catastrophic cancellation can degrade accuracy at high sensitivity orders---the block lower-triangular Jacobian structure isolates this within each order block, but does not eliminate it. The current implementation computes all requested sensitivity orders simultaneously; for large parameter dimensions, selective SOVs are essential to keep the RN manageable.
+
+Operator-overloading AD trades runtime overhead for implementation simplicity compared to source-transformation AD. The MVTS type stores $n_q$ coefficients per variable, so memory scales as $O(n_q)$ per DAE variable; for $n_n$ variables and $n_q$ orders, the working set is $O(n n_q)$ floating-point numbers. This is acceptable for systems up to moderate size ($n\le 10^2$, $n_q\le 10^3$) but may become prohibitive for large-scale applications. An alternative approach would compute sensitivity equations symbolically and cache them, avoiding repeated MVTS evaluation at each integration step---this remains future work.
+
+\section{Conclusion}
+
+We have presented the ECSS builder---a method and implementation for automatically generating sensitivity equations for parametrised DAEs using MVTS arithmetic with operator-overloading AD. The SOV framework with dependency closure enables selective computation of arbitrary sensitivity orders; the coefficient propagation rules extend Barrio's MVTS arithmetic from ODEs to structurally analysed DAEs; the three-step generation process (substitution, evaluation, extraction) produces a self-contained, solver-independent DAE in a single evaluation pass.
+
+The companion paper~\cite{cao2026structural} proves that the generated ECSS inherits the structural properties of the original DAE, guaranteeing solvability whenever Pryce's SA succeeds. Together, these two papers provide the theoretical foundation and practical implementation of a general, solver-independent framework for DAE sensitivity analysis.
+
+\subsection*{Acknowledgments}
+The author thanks Ned S.\ Nedialkov for guidance and NSERC for financial support.
+
+\subsection*{Data Availability}
+The Python verification suite reproducing all cross-solver results, plus a self-contained reference implementation of the MVTS builder (\texttt{mvts\_builder.py}) that demonstrates the operator-overloading method on the simple pendulum, is available at\\ \texttt{https://github.com/caobo1994/ecss-verify}. The C++ ECSS builder source code, which is integrated into the DAETS framework~\cite{nedialkov2008solving} and cannot be distributed independently, is available on request from the author.
+
+\begin{thebibliography}{99}
+
+\bibitem{barrio2006sensitivity}
+R.\ Barrio.
+Sensitivity analysis of ODEs/DAEs using the Taylor series method.
+\textit{SIAM J. Sci. Comput.}, 27(6):1929--1947, 2006.
+
+\bibitem{bendtsen1996fadbad}
+C.\ Bendtsen and O.\ Stauning.
+FADBAD, a flexible \cpp\ package for automatic differentiation.
+Tech.\ Rep.\ IMM-REP-1996-17, Technical Univ.\ Denmark, 1996.
+
+\bibitem{brenan1995numerical}
+K.\ E.\ Brenan, S.\ L.\ Campbell, and L.\ R.\ Petzold.
+\textit{Numerical Solution of Initial-Value Problems in Differential-Algebraic Equations}.
+SIAM, 1995.
+
+\bibitem{cao2026structural}
+B.\ Cao.
+Structural inheritance in sensitivity systems of differential-algebraic equations.
+Submitted, 2026.
+
+\bibitem{cao2026supplement}
+B.\ Cao.
+Supplementary materials: ECSS verification suite.\\
+\texttt{https://github.com/caobo1994/ecss-verify}, 2026.
+
+\bibitem{cao2002adjoint}
+Y.\ Cao, S.\ Li, L.\ Petzold, and R.\ Serban.
+Adjoint sensitivity analysis for DAE: algorithms and software.
+\textit{J. Comput. Appl. Math.}, 149:171--192, 2002.
+
+\bibitem{cao2003adjoint}
+Y.\ Cao, S.\ Li, and L.\ Petzold.
+Adjoint sensitivity analysis for DAE: the adjoint DAE system.
+\textit{SIAM J. Sci. Comput.}, 24(3):1076--1089, 2003.
+
+\bibitem{dickinson1976sensitivity}
+R.\ P.\ Dickinson and R.\ J.\ Gelinas.
+Sensitivity analysis of ODE systems---a direct method.
+\textit{J. Comput. Phys.}, 21(2):123--138, 1976.
+
+\bibitem{gardner2022sundials}
+D.\ J.\ Gardner, D.\ R.\ Reynolds, C.\ S.\ Woodward, and C.\ J.\ Balos.
+Enabling new flexibility in the SUNDIALS suite.
+\textit{ACM Trans. Math. Softw.}, 48(3), Art.\ 31, 2022.
+
+\bibitem{goldberg1991every}
+D.\ Goldberg.
+What every computer scientist should know about floating-point arithmetic.
+\textit{ACM Comput. Surv.}, 23(1):5--48, 1991.
+
+\bibitem{griewank2008evaluating}
+A.\ Griewank and A.\ Walther.
+\textit{Evaluating Derivatives: Principles and Techniques of Algorithmic Differentiation}, 2nd ed.
+SIAM, 2008.
+
+\bibitem{higham2002accuracy}
+N.\ J.\ Higham.
+\textit{Accuracy and Stability of Numerical Algorithms}, 2nd ed.
+SIAM, 2002.
+
+\bibitem{isukapalli1998stochastic}
+S.\ S.\ Isukapalli and P.\ G.\ Georgopoulos.
+Stochastic response surface methods for uncertainty propagation.
+\textit{Risk Analysis}, 18(3):351--363, 1998.
+
+\bibitem{li2000sensitivity}
+S.\ Li and L.\ Petzold.
+Software and algorithms for sensitivity analysis of large-scale DAE systems.
+\textit{J. Comput. Appl. Math.}, 125:131--145, 2000.
+
+\bibitem{nedialkov2008solving}
+N.\ S.\ Nedialkov and J.\ D.\ Pryce.
+Solving DAEs by Taylor series (III): the DAETS code.
+\textit{J. Numer. Anal. Ind. Appl. Math.}, 3(1--2):61--80, 2008.
+
+\bibitem{phipps2012sacado}
+E.\ T.\ Phipps and R.\ P.\ Pawlowski.
+Efficient expression templates for operator overloading-based AD.
+\textit{ACM Trans. Math. Softw.}, 38(4), Art.\ 25, 2012.
+
+\bibitem{pryce2001simple}
+J.\ D.\ Pryce.
+A simple structural analysis method for DAEs.
+\textit{BIT Numer. Math.}, 41:364--394, 2001.
+
+\bibitem{rabitz1999efficient}
+H.\ Rabitz, \"{O}.\ F.\ Ali\c{s}, J.\ Shorter, and K.\ Shim.
+Efficient input-output model representations.
+\textit{Comput. Phys. Commun.}, 117(1--2):11--20, 1999.
+
+\bibitem{sagebaum2019codipack}
+M.\ Sagebaum, T.\ Albring, and N.\ R.\ Gauger.
+High-performance derivative computations using CoDiPack.
+\textit{ACM Trans. Math. Softw.}, 45(4), Art.\ 38, 2019.
+
+\bibitem{sandu1997sensitivity}
+A.\ Sandu.
+Sensitivity analysis of ODEs via automatic differentiation.
+MS thesis, Univ.\ Iowa, 1997.
+
+\end{thebibliography}
+
+\end{document}
