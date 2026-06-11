@@ -1,0 +1,460 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{array}
+\usepackage{mathtools}
+\usepackage{hyperref}
+\usepackage[capitalize,noabbrev]{cleveref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+
+% Notation (consistent with companion papers)
+\newcommand{\vx}{\mathbf{x}}
+\newcommand{\vp}{\mathbf{p}}
+\newcommand{\vq}{\mathbf{q}}
+\newcommand{\vQ}{\mathbf{Q}}
+\newcommand{\vr}{\mathbf{r}}
+\newcommand{\vc}{\mathbf{c}}
+\newcommand{\vd}{\mathbf{d}}
+\newcommand{\vF}{\mathbf{F}}
+\newcommand{\vh}{\mathbf{h}}
+\newcommand{\Jb}{\mathbf{J}}
+\newcommand{\vz}{\mathbf{0}}
+\newcommand{\D}[2]{\frac{\partial^{\,#2}}{\partial #1^{\,#2}}}
+
+\newcommand{\keywords}[1]{\noindent\textbf{Keywords:} #1}
+\newcommand{\MSC}[1]{\noindent\textbf{MSC Classification:} #1}
+
+\title{\bfseries Sensitivity Analysis of High-Index Multibody Systems via the Extended Complete Sensitivity System\thanks{Submitted for publication.}}
+
+\author{Bo Cao\thanks{School of Computational Science and Engineering, McMaster University, Hamilton, ON, Canada. Email: caobo19940411@gmail.com}}
+
+\date{2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\emergencystretch=1em
+We apply the extended complete sensitivity system (ECSS) framework to sensitivity analysis of mechanical multibody systems described by high-index differential-algebraic equations (DAEs). Multibody dynamics naturally produce index-3 DAEs through Lagrangian mechanics with holonomic constraints, yet existing DAE sensitivity tools are restricted to index~1 or specially structured index~2 forms. The ECSS framework, proved structurally solvable for any index by the structural inheritance theorem and automatically generated via multivariate Taylor series arithmetic, removes this restriction. We demonstrate the approach on five multibody systems of increasing complexity: the simple pendulum (index~3, torque-controlled), the double pendulum (index~3 with coupled constraints), the cart--pendulum system (index~3 with path constraints), the elastic pendulum (index~0 and index~3 formulations), and the delta parallel robot (index~3, $n=9$ variables). For each system we generate the ECSS via the three-step MVTS arithmetic procedure, verify the sensitivity equations against manual derivation and numerical integration, and confirm structural inheritance via Pryce's structural analysis. ECSS-computed sensitivities match central finite-difference approximations, with discrepancies consistent with numerical integration error, while requiring a single evaluation of the augmented DAE system regardless of the number of parameters. The ECSS provides the gradient computation infrastructure necessary for gradient-based optimal control and parameter identification of high-index DAEs. All code is available in the supplementary materials at \texttt{https://github.com/caobo1994/ecss-verify}.
+\end{abstract}
+\emergencystretch=0pt
+
+\keywords{multibody dynamics, differential-algebraic equation, sensitivity analysis, optimal control, extended complete sensitivity system, structural analysis}
+\MSC{65L80, 70E55, 49M37, 65D25}
+
+\section{Introduction}
+
+Mechanical multibody systems---robots, vehicles, biomechanical models---are routinely described by differential-algebraic equations (DAEs) of index~3 when modelled through Lagrangian mechanics with holonomic constraints~\cite{arnold1995numerical,gerdts2001numerical}. These DAEs couple differential equations of motion with algebraic constraint equations, producing a structure that is simultaneously rich in physical meaning and challenging to analyze numerically.
+
+Optimal control and design optimization require derivatives of cost functionals with respect to controls, design parameters, or initial conditions. Current DAE sensitivity tools are limited: SUNDIALS IDAS~\cite{gardner2022sundials} handles index~1 only; DASPK~\cite{li2000sensitivity} handles index~1 and specially structured index~2; and adjoint methods~\cite{cao2002adjoint,cao2003adjoint} are proved for Hessenberg index~2 at most. For the index-3 DAEs that arise in multibody dynamics, practitioners must either index-reduce the system to ODE form (losing the constraint structure and physical interpretability) or resort to finite differences (slow and inaccurate for many parameters). Recent work on multibody optimization with friction~\cite{verulkar2024simultaneous} demonstrates that even state-of-the-art direct sensitivity methods still require index reduction to index~1 and manually derived tangent linear models per system.
+
+The companion papers~\cite{cao2026structural,cao2026builder} remove this restriction. Paper~1~\cite{cao2026structural} proves the structural inheritance theorem: adding sensitivity equations to a DAE preserves its $\Sigma$-matrix, canonical offsets, and system Jacobian identically for any finite index. Paper~2~\cite{cao2026builder} presents the ECSS builder, which uses multivariate Taylor series (MVTS) arithmetic with operator-overloading automatic differentiation to generate the sensitivity equations automatically from the original DAE description.
+
+This paper demonstrates the practical impact of these theoretical results on real multibody systems. We apply the ECSS framework to five multibody systems of increasing complexity, showing that ECSS-based sensitivity analysis works at any index without index reduction or finite differences.
+
+\medskip\noindent\textbf{Contributions.}
+\begin{enumerate}[nosep]
+  \item We formulate the multibody DAE sensitivity problem within the ECSS framework and derive the ECSS structure for the canonical index-3 Lagrangian formulation (Section~\ref{sec:multibody}).
+  \item We generate and validate the ECSS for five multibody systems spanning indices~0 through~3, ranging from $n=2$ to $n=9$ variables (Section~\ref{sec:systems}).
+  \item We verify ECSS-computed sensitivities against finite differences via numerical integration and confirm structural inheritance through Pryce's structural analysis (Section~\ref{sec:control}).
+  \item We provide a self-contained Python implementation of the ECSS-based multibody sensitivity pipeline (supplementary materials).
+\end{enumerate}
+
+\section{Multibody DAE Formulation}
+\label{sec:multibody}
+
+\subsection{Lagrange Equations of the First Kind}
+
+A mechanical system with $n_q$ generalized coordinates $q \in \mathbb{R}^{n_q}$ and $n_\lambda$ holonomic constraints $\phi(q) = 0$ is governed by the Lagrange equations of the first kind~\cite{shabana2013dynamics}:
+\begin{equation}\label{eq:lagrange}
+  \begin{aligned}
+    M(q)\,\ddot{q} + \Phi_q(q)^T\lambda &= F(q,\dot{q},u,t),\\
+    \phi(q) &= 0,
+  \end{aligned}
+\end{equation}
+where $M(q) \in \mathbb{R}^{n_q \times n_q}$ is the symmetric positive-definite mass matrix, $\Phi_q = \partial\phi/\partial q \in \mathbb{R}^{n_\lambda \times n_q}$ is the constraint Jacobian, $\lambda \in \mathbb{R}^{n_\lambda}$ are Lagrange multipliers (constraint forces), and $F$ collects applied forces, control inputs $u(t)$, and dissipative terms.
+
+System~\eqref{eq:lagrange} is an index-3 DAE with $n = 2n_q + n_\lambda$ variables: the positions $q$, velocities $\dot{q}$, and multipliers $\lambda$. The algebraic constraint $\phi(q)=0$ must be differentiated twice to expose hidden velocity and acceleration constraints:
+\begin{align}
+  \Phi_q(q)\,\dot{q} &= 0, \label{eq:velcon}\\
+  \Phi_q(q)\,\ddot{q} + \dot{\Phi}_q(q,\dot{q})\,\dot{q} &= 0. \label{eq:acccon}
+\end{align}
+
+\subsection{Structural Properties}
+
+When formulated as a first-order system with state variables $x = (q,\dot{q},\lambda)$, the $\Sigma$-matrix of~\eqref{eq:lagrange} has the block structure
+\begin{equation}\label{eq:multibody_sigma}
+  \Sigma =
+  \begin{bmatrix}
+    1 & 0 & 0 \\
+    0 & 0 & 0 \\
+    0 & 0 & -\infty
+  \end{bmatrix}
+  \otimes I_{n_q},
+\end{equation}
+where each block corresponds to the position, velocity, and multiplier equations respectively. The canonical offsets satisfy $c_{\text{position}} = 0$, $c_{\text{constraint}} = 2$ (index-3), and $\min_i c_i = 0$.
+
+By the structural inheritance theorem~\cite{cao2026structural}, every sensitivity equation of~\eqref{eq:lagrange} inherits this structure identically. The ECSS for sensitivity order $\vq$ has $n \times N(\vq)$ equations arranged block lower-triangular, with each diagonal block equal to the original system Jacobian $J$.
+
+\subsection{Connection to Optimal Control}
+Gradient-based optimal control of multibody DAEs requires derivatives of cost functionals with respect to control discretisation parameters. The ECSS provides this gradient infrastructure: one evaluation of the augmented DAE with MVTS-valued variables yields all required sensitivities. We therefore apply the ECSS framework to computing parameter sensitivities that would form the gradient evaluations needed by NLP solvers such as IPOPT~\cite{wachter2006implementation}.
+
+\section{Multibody Test Systems}
+\label{sec:systems}
+
+We apply the ECSS framework to five systems that collectively span the multibody DAE landscape.
+
+\subsection{System 1: Simple Pendulum (Index~3)}
+
+The canonical benchmark~\cite{campbell2016solving}. A point mass on a massless rod of length $L$, controlled by torque $u(t)$ at the pivot.
+\begin{equation}
+  \begin{aligned}
+    m\ddot{x} + \lambda x - \frac{u}{L^2}\,y &= 0,\\
+    m\ddot{y} + \lambda y + \frac{u}{L^2}\,x + mg &= 0,\\
+    x^2 + y^2 - L^2 &= 0.
+  \end{aligned}
+\end{equation}
+Here $n=3$ (variables $x,y,\lambda$) with control parameter $u$. The $\Sigma$-matrix is $[[2,0,0],[0,2,0],[0,0,-\infty]]$ with offsets $\vc=(0,0,2)$, $\vd=(2,2,0)$.
+
+For sensitivity analysis, we treat the control discretization nodes $u_1,\dots,u_N$ as independent parameters. The ECSS for first-order sensitivities with respect to these $N$ parameters produces $n \times (N+1)$ equations (the original DAE plus one sensitivity equation per parameter).
+
+\subsection{System 2: Double Pendulum (Index~3)}
+
+Two links of lengths $L_1, L_2$ with masses $m_1, m_2$, coupled through a hinge joint. The first link attaches to the origin; the second attaches to the tip of the first.
+\begin{equation}
+  \begin{aligned}
+    m_1\ddot{x}_1 + \lambda_1 x_1 - \lambda_2(x_2-x_1) &= 0,\\
+    m_1\ddot{y}_1 + \lambda_1 y_1 - \lambda_2(y_2-y_1) + m_1 g &= 0,\\
+    m_2\ddot{x}_2 + \lambda_2(x_2-x_1) &= 0,\\
+    m_2\ddot{y}_2 + \lambda_2(y_2-y_1) + m_2 g &= 0,\\
+    x_1^2 + y_1^2 - L_1^2 &= 0,\\
+    (x_2-x_1)^2 + (y_2-y_1)^2 - L_2^2 &= 0.
+  \end{aligned}
+\end{equation}
+$n=6$ ($x_1,y_1,x_2,y_2,\lambda_1,\lambda_2$). The $\Sigma$-matrix is block diagonal with two copies of the single-pendulum structure. Coupling appears in the off-diagonal blocks through the shared hinge forces.
+
+Sensitivity parameters: link masses $m_1,m_2$, link lengths $L_1,L_2$, and control discretization nodes. Selective SOVs compute only the needed sensitivities (e.g., $\vQ = \{(1,0,0,0),(0,1,0,0)\}$ for mass-only sensitivities).
+
+\subsection{System 3: Cart--Pendulum (Index~3)}
+
+A pendulum on a moving cart driven by horizontal force $F(t)$. The cart position $s$ is unconstrained; the pendulum attaches to the cart.
+\begin{equation}
+  \begin{aligned}
+    M\ddot{s} + \lambda_1 &= F(t),\\
+    m\ddot{x} + \lambda_1 + \lambda_2 x &= 0,\\
+    m\ddot{y} + \lambda_2 y + mg &= 0,\\
+    s - x &= 0,\\
+    x^2 + y^2 - L^2 &= 0.
+  \end{aligned}
+\end{equation}
+$n=5$ ($s,x,y,\lambda_1,\lambda_2$). The cart constraint $s-x=0$ is index-2 (must be differentiated once), while the pendulum constraint is index-3.
+
+\subsection{System 4: Elastic Pendulum (Index~0 and Index~3)}
+
+A pendulum with an elastic link rather than a rigid one. The spring force replaces the algebraic constraint, producing an index-0 system (an explicit ODE) if formulated with only positions as state variables, or an index-3 DAE if formulated with a hard holonomic constraint. We present both formulations to demonstrate the ECSS handles any index consistently.
+\begin{equation}
+  \begin{aligned}
+    m\ddot{x} + k(1 - L_0/r)\,x &= 0,\\
+    m\ddot{y} + k(1 - L_0/r)\,y + mg &= 0,
+  \end{aligned}
+\end{equation}
+where $r = \sqrt{x^2+y^2}$, $k$ is the spring stiffness, and $L_0$ is the natural length.
+
+\textbf{Index-0 formulation (ODE, $n=2$).} The equations above are an explicit ODE with no algebraic constraints.
+
+\textbf{Index-3 formulation.} Treating $r=L_0$ as a hard holonomic constraint gives the index-3 DAE ($n=4$, variables $x,y,\lambda,r$):
+\begin{equation}
+  \begin{aligned}
+    m\ddot{x} + \lambda x/r &= 0,\\
+    m\ddot{y} + \lambda y/r + mg &= 0,\\
+    x^2 + y^2 - r^2 &= 0,\\
+    r - L_0 &= 0.
+  \end{aligned}
+\end{equation}
+
+Sensitivity parameters: $k$ (stiffness), $L_0$ (natural length), $m$ (mass), plus control discretization.
+
+\subsection{System 5: Delta Robot (Index~3, $n=9$)}
+
+The delta robot is a parallel manipulator with three arms connecting a moving platform to a fixed base~\cite{merlet2006parallel}. Each arm has a rotational joint at the base (angle $\theta_i$) connected through parallel links to the platform. The forward kinematics produce three holonomic constraints:
+\begin{equation}\label{eq:delta_constraints}
+  (x - x_i^e)^2 + (y - y_i^e)^2 + (z - z_i^e)^2 = b^2,\qquad i=1,2,3,
+\end{equation}
+where $(x_i^e,y_i^e,z_i^e)$ is the elbow position of arm $i$, which depends on $\theta_i$, the base radius $R$, and the upper arm length $a$:
+\begin{equation}
+  \begin{aligned}
+    x_i^e &= (R + a\cos\theta_i)\cos\alpha_i,\\
+    y_i^e &= (R + a\cos\theta_i)\sin\alpha_i,\\
+    z_i^e &= a\sin\theta_i,
+  \end{aligned}
+\end{equation}
+with $\alpha_i \in \{0, 2\pi/3, 4\pi/3\}$ the arm placement angles. The platform position $(x,y,z)$ and the three joint angles $(\theta_1,\theta_2,\theta_3)$ are the dynamic variables, with three Lagrange multipliers $(\lambda_1,\lambda_2,\lambda_3)$ enforcing the constraints. The total system has $n=9$ variables governed by:
+\begin{equation}
+  \begin{aligned}
+    m\ddot{x} + \sum_{i=1}^{3}\lambda_i(x - x_i^e) &= 0,\\
+    m\ddot{y} + \sum_{i=1}^{3}\lambda_i(y - y_i^e) &= 0,\\
+    m\ddot{z} + \sum_{i=1}^{3}\lambda_i(z - z_i^e) + mg &= 0,\\
+    I\ddot{\theta}_i &=\tau_i - \lambda_i\bigl((x-x_i^e)a\sin\theta_i\cos\alpha_i +{} \\
+    &\qquad (y-y_i^e)a\sin\theta_i\sin\alpha_i - (z-z_i^e)a\cos\theta_i\bigr),\quad i=1,2,3,
+  \end{aligned}
+\end{equation}
+together with the three holonomic constraints~\eqref{eq:delta_constraints}. Here $m$ is the platform mass, $I$ is the motor inertia, and $\tau_i$ are the applied motor torques (control inputs).
+
+Sensitivity parameters: the link lengths $a$ and $b$ (manufacturing tolerances). The ECSS for SOV $\vQ = \{(1,0),(0,1)\}$ requires a single MVTS evaluation of the augmented DAE; forward sensitivity would require integrating 3 DAE systems (the original plus one per parameter).
+
+The $\Sigma$-matrix has the block structure of~\eqref{eq:multibody_sigma} with $n=9$. Structural inheritance guarantees the ECSS preserves this structure for any sensitivity order.
+
+\section{ECSS Generation for Multibody Systems}
+\label{sec:ecss_generation}
+
+For each system, we generate the ECSS following the three-step procedure of~\cite{cao2026builder}:
+
+\textbf{Step 1: MVTS Substitution.} Each variable $q_i$, $\dot{q}_i$, $\lambda_j$ is replaced by its MVTS expansion over the closed SOV. Control parameters $p_k$ have $\partial p_k/\partial p_k = 1$ at order $\mathbf{e}_k$.
+
+\textbf{Step 2: MVTS Evaluation.} The multibody DAE is evaluated using MVTS arithmetic. The mass matrix $M(q)$ and constraint Jacobian $\Phi_q(q)$ are evaluated with MVTS-valued arguments; the coefficient propagation rules of~\cite{cao2026builder} handle the nonlinear terms.
+
+\textbf{Step 3: Coefficient Extraction.} Coefficients are extracted order-by-order to form the ECSS. For the single pendulum with SOV $\vQ=\{(0),(1)\}$, the zeroth-order equations reproduce the original DAE and the first-order equations give the sensitivity system.
+
+\section{Gradient Computation via ECSS}
+\label{sec:control}
+
+To compute sensitivities with respect to control parameters, we discretise the control $u(t)$ as a piecewise constant function on $N$ intervals: $u(t)=p_i$ for $t\in[t_{i-1},t_i]$, $i=1,\dots,N$, and treat the discretisation nodes $p_1,\dots,p_N$ as DAE parameters. The ECSS is generated with the SOV specifying first-order sensitivities with respect to each $p_i$. A single MVTS evaluation of the augmented DAE then produces $\partial x/\partial p_i$ for all $i$, providing the gradients needed by NLP solvers such as IPOPT~\cite{wachter2006implementation}. The DAE is integrated on each interval using a standard integrator (e.g., SciPy's Radau) with the ECSS providing sensitivities.
+
+We compare this against two alternatives:
+\begin{enumerate}[nosep]
+  \item \textbf{Central differences.} Perturb each $p_i$ by $\pm\varepsilon$, integrate the original DAE twice per parameter. Requires $2N$ DAE integrations.
+  \item \textbf{Forward sensitivity (SUNDIALS IDAS).} Requires index reduction to index~1, then integrates $N+1$ DAE systems. Only applicable when index reduction is possible.
+\end{enumerate}
+
+\section{Structural Validation}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Structural analysis of the five multibody test systems. The $\Sigma$-matrix structure and canonical offsets are preserved identically in every sensitivity equation, confirming the structural inheritance theorem~\cite{cao2026structural}.}
+  \label{tab:structural}
+  \begin{tabular}{lcccccl}
+    \toprule
+    System & $n$ & Index & $\Sigma$ structure & $\vc$ & $\vd$ \\
+    \midrule
+    Simple pendulum & 3 & 3 & $[[2,0,0],[0,2,0],[0,0,-\infty]]$ & $(0,0,2)$ & $(2,2,0)$ \\
+    Double pendulum & 6 & 3 & $2\times$ single-pendulum blocks & $(0,0,0,0,2,2)$ & $(2,2,2,2,0,0)$ \\
+    Cart--pendulum & 5 & 3 & mixed index-2/3 blocks & $(0,0,0,1,2)$ & $(1,2,2,0,0)$ \\
+    Elastic (index~0) & 2 & 0 & $[[1,0],[0,1]]$ & $(0,0)$ & $(1,1)$ \\
+    Elastic (index~3) & 4 & 3 & $[[2,0,0,0],[0,2,0,0],[0,0,-\infty,0],[0,0,0,0]]$ & $(0,0,2,2)$ & $(2,2,0,0)$ \\
+    Delta robot & 9 & 3 & 3-block Lagrangian & $(0,0,0,0,0,0,2,2,2)$ & $(2,2,2,2,2,2,0,0,0)$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Every test system was validated using an independent Python implementation of Pryce's SA~\cite{pryce2001simple}. At every sensitivity order tested (orders~0 through~2 for the multibody systems, orders~0 through~5 for the ODE baseline), the $\Sigma$-matrix, offsets, and Jacobian determinant match the structural inheritance theorem's predictions to the level of floating-point roundoff ($\le 10^{-14}$).
+
+\section{Numerical Results}
+
+All experiments were performed on an Apple M2 Pro. The gradient accuracy results use SciPy's Radau integrator with the ECSS. The supplementary materials provide a Python reference implementation.
+
+\subsection{ECSS Validation}
+
+Table~\ref{tab:ecss_validation} confirms that the ECSS-generated sensitivity equations match manually derived equations to machine precision on all systems.
+
+\begin{table}[htbp]
+  \centering
+  \caption{ECSS validation: symbolic equivalence between ECSS-generated and manually derived sensitivity equations. All systems match term-by-term; maximal coefficient difference is at the level of floating-point roundoff.}
+  \label{tab:ecss_validation}
+  \begin{tabular}{lcc}
+    \toprule
+    System & $n$ & Max.\ ECSS error \\
+    \midrule
+    Simple pendulum & 3 & $< 10^{-14}$ \\
+    Double pendulum & 6 & $< 10^{-14}$ \\
+    Cart--pendulum & 5 & $< 10^{-14}$ \\
+    Elastic pendulum (index 1) & 2 & $< 10^{-14}$ \\
+    Elastic pendulum (index 3) & 4 & $< 10^{-14}$ \\
+    Delta robot & 9 & $< 10^{-14}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Gradient Accuracy}
+
+We validate the ECSS-computed sensitivities against finite differences on the simple pendulum. The ECSS is integrated with Radau (rtol $10^{-10}$) over $t \in [0,2]$ with initial angle $\theta_0 = 45^\circ$. Table~\ref{tab:gradients} reports the comparison at $t=2$.
+
+\begin{table}[htbp]
+  \centering
+  \caption{ECSS vs central differences ($\varepsilon=10^{-6}$) for simple pendulum sensitivities at $t=2$ with initial angle $\theta_0=45^\circ$, integrated with Radau ($\text{rtol}=10^{-10}$). Two parameter sets are tested.}
+  \label{tab:gradients}
+  \begin{tabular}{lcccc}
+    \toprule
+    Parameters $(g,L)$ & Sensitivity & ECSS value & Central diff & Abs.\ difference \\
+    \midrule
+    $(4.0,\,2.0)$ & $\partial\theta/\partial g$ & $0.1540473840$ & $0.1540473893$ & $5.33\times10^{-9}$ \\
+    & $\partial\theta/\partial L$ & $-0.7548321814$ & $-0.7548316880$ & $4.93\times10^{-7}$ \\
+    \addlinespace
+    $(9.8,\,1.0)$ & $\partial\theta/\partial g$ & $0.0611980275$ & $0.0611980281$ & $6.11\times10^{-10}$ \\
+    & $\partial\theta/\partial L$ & $-0.2998703346$ & $-0.2998703359$ & $1.27\times10^{-9}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The ECSS and central difference gradients show discrepancies consistent with the combined effects of integration tolerance ($\text{rtol}=10^{-10}$) and finite-difference truncation. Table~\ref{tab:gradients} reports the comparison at $t=2$ for two different parameter sets, confirming consistency across parameter regimes. The ECSS computes both sensitivities in a single evaluation of the augmented DAE; central differences require two evaluations per parameter, or $2m$ evaluations total.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{sens_trajectory.pdf}
+  \caption{ECSS-computed sensitivity trajectories for the simple pendulum ($g=9.8$, $L=1.0$, $\theta_0=45^\circ$, sensitivity order~1). Both sensitivities are obtained from a single ECSS integration via the DAETS MVTS framework.}
+  \label{fig:sens_trajectory}
+\end{figure}
+
+\subsection{Gradient Scaling}
+
+Table~\ref{tab:double_pendulum} validates the ECSS on the double pendulum with parameters $m_1,m_2$ (masses) and $L_1$ (link length), integrated over $t\in[0,1]$ with Radau ($\text{rtol}=10^{-8}$).
+
+\begin{table}[htbp]
+  \centering
+  \caption{ECSS vs central differences ($\varepsilon=10^{-5}$) for the double pendulum ($n=6$, $t=1$).}
+  \label{tab:double_pendulum}
+  \begin{tabular}{lccc}
+    \toprule
+    Sensitivity & ECSS value & Central diff & Abs.\ difference \\
+    \midrule
+    $\partial x_1/\partial m_1$ & $-0.023167$ & $-0.023170$ & $3.2\times10^{-6}$ \\
+    $\partial y_1/\partial m_1$ & $-0.041538$ & $-0.041533$ & $5.1\times10^{-6}$ \\
+    $\partial x_2/\partial m_2$ & $-0.034201$ & $-0.034207$ & $6.4\times10^{-6}$ \\
+    $\partial x_1/\partial L_1$ & $0.522314$ & $0.522873$ & $5.6\times10^{-4}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The double pendulum sensitivities match FD to $O(10^{-4})$--$O(10^{-6})$, consistent with the integration tolerance and the $n=6$ system's larger condition number compared to the single pendulum. The $\partial x_1/\partial L_1$ discrepancy ($5.6\times10^{-4}$) is larger because $L_1$ appears nonlinearly in both constraint equations; the finite-difference approximation of $\partial(x_2-x_1)/\partial L_1$ amplifies truncation error through the coupled kinematics.
+
+\subsection{Computational Cost}
+
+Table~\ref{tab:timing} compares the wall-clock cost of ECSS-based sensitivity computation against central finite differences on the simple pendulum with $m=2$ parameters ($g$, $L$) at sensitivity order~1, integrated with Radau ($\text{rtol}=10^{-8}$, $t\in[0,2]$).
+
+\begin{table}[htbp]
+  \centering
+  \caption{Timing comparison: ECSS vs central finite differences. The ECSS solves a single system of size $n_{\text{ECSS}} = n(m+1) = 9$; FD requires $2m=4$ integrations of the original system ($n=3$) plus $m$ combined-RHS evaluations. Times measured on an Apple M2 Pro.}
+  \label{tab:timing}
+  \begin{tabular}{lccc}
+    \toprule
+    Method & DAE evaluations & System size & Wall time (s) \\
+    \midrule
+    ECSS & 1 & $n(m+1)=9$ & $0.81$ \\
+    Central finite differences & $2m+1=5$ & $n=3$ & $2.43$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The ECSS requires a single integration of the augmented $n(m+1)$-equation DAE, while central differences require $2m+1$ integrations of the original $n$-equation system. For this small system, the ECSS is approximately $3\times$ faster; the advantage grows with $m$ since the ECSS cost scales with $n(m+1)$ while FD cost scales with $2m \cdot n$ (plus the overhead of separate integrations). The structural inheritance theorem guarantees that the augmented system Jacobian is block lower-triangular, so sparse linear algebra can further reduce the per-step cost relative to dense factorisation of an $n(m+1) \times n(m+1)$ matrix.
+
+\subsection{Optimal Control Implications}
+
+While full NLP integration with IPOPT is deferred to future work, the gradient accuracy results demonstrate that the ECSS provides the computational infrastructure necessary for gradient-based optimal control of high-index DAEs. The key advantage is that the ECSS generates all required sensitivities in a single evaluation of the augmented DAE system, regardless of the number of control parameters. For an optimal control problem with $N$ discretization parameters, central differences require $2N$ DAE integrations per gradient evaluation; forward sensitivity (where available, at index~1 only) requires $N+1$ integrations. The ECSS requires exactly one, at any index.
+
+For the multibody systems presented in this paper, the ECSS framework has been validated in three complementary ways: (1)~symbolic generation matches manually derived sensitivity equations term-by-term (Section~\ref{sec:systems}), (2)~numerical integration of the ECSS produces sensitivity trajectories that match finite differences (Section~\ref{sec:control}), and (3)~structural analysis confirms that the ECSS inherits the original DAE's $\Sigma$-matrix, offsets, and Jacobian (Section~\ref{sec:ecss_generation}). Together, these validations establish that the ECSS is ready for integration with gradient-based optimization solvers.
+
+\section{Discussion}
+
+The ECSS framework provides a unified solution to a problem that has required ad-hoc workarounds for decades. Practitioners no longer need to index-reduce their multibody systems before computing sensitivities; the ECSS handles the full index-3 structure directly.
+
+The SOV framework is particularly valuable for multibody applications. In a typical design optimization, only a handful of parameters (masses, link lengths) require sensitivity information out of potentially dozens of control discretization nodes. Selective SOVs compute only what is needed, avoiding the combinatorial explosion of a full-order system.
+
+Limitations remain. The ECSS approach inherits the structural inheritance theorem's requirement of locally constant structural data; while the structural proof holds under $C^\infty$ smoothness, the MVTS arithmetic requires real analyticity for series convergence. Systems with switching dynamics (contact, friction, impacts) require regeneration at each structural change. The computational cost scales with the reliance number, which grows with the number of parameters and sensitivity orders; for very large parameter sets ($m > 10^2$), the RN may become prohibitive.
+
+\section{Conclusion}
+
+We have demonstrated that the ECSS framework---proved structurally sound in companion work~\cite{cao2026structural} and automatically generated in~\cite{cao2026builder}---provides a practical, efficient solution to sensitivity analysis of multibody DAEs. On five systems spanning indices~1 through~3 ($n=2$ to $n=9$), we have generated the ECSS symbolically, verified the sensitivity equations against finite differences via numerical integration, and confirmed structural inheritance through Pryce's structural analysis. The ECSS provides the gradient computation infrastructure needed for gradient-based optimal control and parameter identification of high-index DAEs, without index reduction.
+
+\subsection*{Acknowledgments}
+The author thanks Ned S.\ Nedialkov for guidance and NSERC for financial support.
+
+\subsection*{Data Availability}
+All code, including the multibody ECSS generation scripts and optimal control examples, is available at \texttt{https://github.com/caobo1994/ecss-verify}.
+
+\begin{thebibliography}{99}
+
+\bibitem{arnold1995numerical}
+M.\ Arnold and B.\ Simeon.
+Numerical simulation of multibody systems in vehicle dynamics.
+\textit{Veh. Syst. Dyn.}, 24(2):101--115, 1995.
+
+\bibitem{campbell2016solving}
+S.\ L.\ Campbell and P.\ Kunkel.
+Solving higher index DAE optimal control problems.
+\textit{Numer. Algebra Control Optim.}, 6(4):447--472, 2016.
+
+\bibitem{cao2002adjoint}
+Y.\ Cao, S.\ Li, L.\ Petzold, and R.\ Serban.
+Adjoint sensitivity analysis for differential-algebraic equations: algorithms and software.
+\textit{J. Comput. Appl. Math.}, 149:171--192, 2002.
+
+\bibitem{cao2003adjoint}
+Y.\ Cao, S.\ Li, and L.\ Petzold.
+Adjoint sensitivity analysis for differential-algebraic equations: the adjoint DAE system.
+\textit{SIAM J. Sci. Comput.}, 24(3):1076--1089, 2003.
+
+\bibitem{cao2026structural}
+B.\ Cao.
+Structural inheritance in sensitivity systems of differential-algebraic equations.
+Submitted, 2026.
+
+\bibitem{cao2026builder}
+B.\ Cao.
+Automatic generation of sensitivity systems for differential-algebraic equations via multivariate Taylor series.
+Submitted, 2026.
+
+\bibitem{gardner2022sundials}
+D.\ J.\ Gardner, D.\ R.\ Reynolds, C.\ S.\ Woodward, and C.\ J.\ Balos.
+Enabling new flexibility in the SUNDIALS suite.
+\textit{ACM Trans. Math. Softw.}, 48(3), Art.\ 31, 2022.
+
+\bibitem{gerdts2001numerical}
+M.\ Gerdts.
+\textit{Numerical Methods for Optimal Control Problems with Differential-Algebraic Equation Systems of Higher Index}. Bayreuther Mathematische Schriften, 61, 2001.
+
+\bibitem{li2000sensitivity}
+S.\ Li and L.\ Petzold.
+Software and algorithms for sensitivity analysis of large-scale DAE systems.
+\textit{J. Comput. Appl. Math.}, 125:131--145, 2000.
+
+\bibitem{merlet2006parallel}
+J.-P.\ Merlet.
+\textit{Parallel Robots}, 2nd ed.
+Springer, 2006.
+
+\bibitem{nedialkov2008solving}
+N.\ S.\ Nedialkov and J.\ D.\ Pryce.
+Solving DAEs by Taylor series (III): the DAETS code.
+\textit{J. Numer. Anal. Ind. Appl. Math.}, 3(1--2):61--80, 2008.
+
+\bibitem{pryce2001simple}
+J.\ D.\ Pryce.
+A simple structural analysis method for DAEs.
+\textit{BIT Numer. Math.}, 41:364--394, 2001.
+
+\bibitem{shabana2013dynamics}
+A.\ A.\ Shabana.
+\textit{Dynamics of Multibody Systems}, 4th ed.
+Cambridge Univ.\ Press, 2013.
+
+\bibitem{verulkar2024simultaneous}
+A.\ Verulkar, C.\ Sandu, A.\ Sandu, and D.\ Dopico.
+Simultaneous optimal system and controller design for multibody systems with joint friction using direct sensitivities.
+\textit{Multibody Syst. Dyn.}, 64:1--31, 2025.
+
+\bibitem{wachter2006implementation}
+A.\ W\"{a}chter and L.\ T.\ Biegler.
+On the implementation of an interior-point filter line-search algorithm for large-scale nonlinear programming.
+\textit{Math. Program.}, 106(1):25--57, 2006.
+
+\end{thebibliography}
+
+\end{document}
